@@ -63,6 +63,15 @@
       "erosionBandRadius": 0.4,
       "erosionBandMinZ": 45.0,
       "erosionBandMaxZ": 51.0,
+      "_4029_README_beam_treads": "Beam-tread preservation for the OG zeppelin deck-lip step-up beams. Static collision shows the upward tread tops in WoW X[1333.8,1344.6], Y[-4657.7,-4644.1], Z[49.3,53.3]. The deck plate starts at about z53.54, so the boxes cap at z53.35 to exclude the deck interior. lowHeightRelax* keeps only spans inside the beam box from being deleted by full Tauren standing clearance under the deck/next tread; the same reduced height is used to restore compact-heightfield neighbor links in that box. erosionRadiusBoxesWow is a separate no-erosion upper-beam box and does not modify the committed z[45,51] fall-fix band.",
+      "lowHeightRelaxWalkableHeight": 0.35,
+      "lowHeightRelaxBoxesWow": [
+        [1333.4, -4658.0, 49.2, 1344.8, -4643.6, 53.35]
+      ],
+      "erosionBoxRadius": 0.0,
+      "erosionRadiusBoxesWow": [
+        [1335.0, -4649.0, 50.9, 1344.8, -4643.6, 53.35]
+      ],
       "maxVertsPerPoly": 3,
       "_4029_README_detail": "detailSampleDist/MaxError pinned per-tile because 4029 runs cs=0.1 but the global defaults are 1.6/0.5 (one sample per ~16 cells) -- a real cs/detail mismatch; 0.3/0.2 makes rcBuildPolyMeshDetail conform to the fine ramp/lip surface. NECESSARY BUT NOT SUFFICIENT for the deck-lip fall: this refines Z WITHIN the poly footprint, it does NOT trim the over-extended FOOTPRINT. It was necessary-not-sufficient for the deck-lip fall, now RESOLVED by the erosionBandRadius knob above (NOT by a filterLedgeSpans change). Root cause (proven via per-stage compact-span CSV, not the earlier ledge-filter hypothesis): the supported inner ramp floor at the lip was destroyed at the EROSION stage, not by filterLedgeSpans (rasterize==filterLedge there) and not by region/contour (regions==median==erode count). The full 1.0247y capsule erosion bit ~1.1y inward from the deck-edge riser/wall and wiped the narrow supported floor (X1345.6 / Y-4651..-4652: 394->152 walkable spans at erode), leaving only the wider UNSUPPORTED cantilever, which the Detour path then hugged out over the void. Z-banding the erosion radius (band z45-51, radius 0.4y) recovers the supported floor up to the real edge y~-4652 and widens the lip corridor from ~0.5-1y to ~2y. Live-verified 2026-06-03 (2/2): bot now climbs z24->z47->~z51 with NO fall (fallTime=0, no movedZ<0 collapse) and the test reaches the Frezza deck approach. NOTE the residual ~7-8y / ~2.5y to Frezza's literal spawn is the SEPARATE pre-existing deck-lip 1.75y step-up onto the upper platform (see og-zeppelin.json ClimbOrgrimmarTowerToFrezza), not the fall.",
       "detailSampleDist": 0.3,

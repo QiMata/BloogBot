@@ -545,6 +545,22 @@ static std::vector<DebugStageCrop> ReadDebugStageCrops(const json& jsonTileConfi
     return crops;
 }
 
+static std::vector<DebugStageCrop> ReadWowBoxList(const json& jsonTileConfig, const char* key)
+{
+    std::vector<DebugStageCrop> boxes;
+    auto it = jsonTileConfig.find(key);
+    if (it != jsonTileConfig.end() && it->is_array())
+    {
+        for (const json& wowBox : *it)
+        {
+            DebugStageCrop box = ParseDebugStageCropWow(wowBox);
+            if (box.enabled)
+                boxes.push_back(box);
+        }
+    }
+    return boxes;
+}
+
 static bool IntersectsDebugCrop2D(float minX, float maxX, float minZ, float maxZ, const DebugStageCrop& crop)
 {
     if (!crop.enabled)
@@ -743,18 +759,7 @@ static void WriteContourStageCsv(uint32 mapID, uint32 tileX, uint32 tileY, int s
 // the DebugStageCrop AABB representation (recastX<-WoWY, recastZ<-WoWX, height<-WoWZ).
 static std::vector<DebugStageCrop> ReadNavCullBoxes(const json& jsonTileConfig)
 {
-    std::vector<DebugStageCrop> boxes;
-    auto it = jsonTileConfig.find("navCullBoxesWow");
-    if (it != jsonTileConfig.end() && it->is_array())
-    {
-        for (const json& wowBox : *it)
-        {
-            DebugStageCrop box = ParseDebugStageCropWow(wowBox);
-            if (box.enabled)
-                boxes.push_back(box);
-        }
-    }
-    return boxes;
+    return ReadWowBoxList(jsonTileConfig, "navCullBoxesWow");
 }
 
 static int cullWalkableCompactSpansInBoxes(rcCompactHeightfield& chf, const std::vector<DebugStageCrop>& boxes)
@@ -792,6 +797,147 @@ static int cullWalkableCompactSpansInBoxes(rcCompactHeightfield& chf, const std:
         }
     }
     return culled;
+}
+
+static bool HeightfieldSpanSurfaceInBoxes(const rcHeightfield& hf, int x, int y, const rcSpan& span,
+    const std::vector<DebugStageCrop>& boxes)
+{
+    if (boxes.empty())
+        return false;
+
+    const float cellMinZ = hf.bmin[2] + y * hf.cs;
+    const float cellMaxZ = cellMinZ + hf.cs;
+    const float cellMinX = hf.bmin[0] + x * hf.cs;
+    const float cellMaxX = cellMinX + hf.cs;
+    const float surfaceHeight = hf.bmin[1] + (float)span.smax * hf.ch;
+    for (const DebugStageCrop& box : boxes)
+    {
+        if (IntersectsDebugCrop2D(cellMinX, cellMaxX, cellMinZ, cellMaxZ, box)
+            && IntersectsDebugCropHeight(surfaceHeight, surfaceHeight, box))
+            return true;
+    }
+    return false;
+}
+
+static bool CompactSpanSurfaceInBoxes(const rcCompactHeightfield& chf, int x, int y, const rcCompactSpan& span,
+    const std::vector<DebugStageCrop>& boxes)
+{
+    if (boxes.empty())
+        return false;
+
+    const float cellMinZ = chf.bmin[2] + y * chf.cs;
+    const float cellMaxZ = cellMinZ + chf.cs;
+    const float cellMinX = chf.bmin[0] + x * chf.cs;
+    const float cellMaxX = cellMinX + chf.cs;
+    const float surfaceHeight = chf.bmin[1] + (float)span.y * chf.ch;
+    for (const DebugStageCrop& box : boxes)
+    {
+        if (IntersectsDebugCrop2D(cellMinX, cellMaxX, cellMinZ, cellMaxZ, box)
+            && IntersectsDebugCropHeight(surfaceHeight, surfaceHeight, box))
+            return true;
+    }
+    return false;
+}
+
+// [WWoW-DIVERGENCE] Tile-scoped low-headroom preservation for thin step-over
+// beam treads. OG zeppelin tile 4029 has small wooden treads below the upper
+// deck/next tread. A full Tauren standing-clearance test deletes them even
+// though the player steps over the beam, not under the soffit. Boxes are
+// optional JSON AABBs; absent => use stock rcFilterWalkableLowHeightSpans.
+static int filterWalkableLowHeightSpansBoxed(rcContext* context, const int walkableHeight,
+    const int boxedWalkableHeight, const std::vector<DebugStageCrop>& boxes, rcHeightfield& heightfield)
+{
+    rcAssert(context);
+    rcScopedTimer timer(context, RC_TIMER_FILTER_WALKABLE);
+
+    const int xSize = heightfield.width;
+    const int zSize = heightfield.height;
+    int preserved = 0;
+
+    for (int z = 0; z < zSize; ++z)
+    {
+        for (int x = 0; x < xSize; ++x)
+        {
+            for (rcSpan* span = heightfield.spans[x + z * xSize]; span; span = span->next)
+            {
+                const int floor = (int)span->smax;
+                const int ceiling = span->next ? (int)span->next->smin : 0xffff;
+                if (ceiling - floor >= walkableHeight)
+                    continue;
+
+                if (span->area != RC_NULL_AREA
+                    && HeightfieldSpanSurfaceInBoxes(heightfield, x, z, *span, boxes)
+                    && ceiling - floor >= boxedWalkableHeight)
+                {
+                    ++preserved;
+                    continue;
+                }
+
+                span->area = RC_NULL_AREA;
+            }
+        }
+    }
+
+    return preserved;
+}
+
+// Same beam-tread headroom relaxation, but at compact-neighbor link time.
+// rcBuildCompactHeightfield stores low-headroom spans once the heightfield area
+// survives, then applies walkableHeight again while wiring cell connections. The
+// box-local reduced height must therefore be reflected in links too; the Detour
+// header and global capsule dimensions remain unchanged.
+static int relaxCompactHeightfieldConnectionsInBoxes(rcCompactHeightfield& chf, const int boxedWalkableHeight,
+    const int walkableClimb, const std::vector<DebugStageCrop>& boxes)
+{
+    if (boxes.empty())
+        return 0;
+
+    const int maxLayers = RC_NOT_CONNECTED - 1;
+    int relaxed = 0;
+    for (int y = 0; y < chf.height; ++y)
+    {
+        for (int x = 0; x < chf.width; ++x)
+        {
+            const rcCompactCell& cell = chf.cells[x + y * chf.width];
+            for (int i = (int)cell.index, ni = (int)(cell.index + cell.count); i < ni; ++i)
+            {
+                rcCompactSpan& span = chf.spans[i];
+                const bool spanInBox = CompactSpanSurfaceInBoxes(chf, x, y, span, boxes);
+                for (int dir = 0; dir < 4; ++dir)
+                {
+                    if (rcGetCon(span, dir) != RC_NOT_CONNECTED)
+                        continue;
+
+                    const int nx = x + rcGetDirOffsetX(dir);
+                    const int ny = y + rcGetDirOffsetY(dir);
+                    if (nx < 0 || ny < 0 || nx >= chf.width || ny >= chf.height)
+                        continue;
+
+                    const rcCompactCell& neighborCell = chf.cells[nx + ny * chf.width];
+                    for (int k = (int)neighborCell.index, nk = (int)(neighborCell.index + neighborCell.count); k < nk; ++k)
+                    {
+                        const rcCompactSpan& neighborSpan = chf.spans[k];
+                        if (!spanInBox && !CompactSpanSurfaceInBoxes(chf, nx, ny, neighborSpan, boxes))
+                            continue;
+
+                        const int bot = rcMax((int)span.y, (int)neighborSpan.y);
+                        const int top = rcMin((int)(span.y + span.h), (int)(neighborSpan.y + neighborSpan.h));
+                        if ((top - bot) < boxedWalkableHeight || rcAbs((int)neighborSpan.y - (int)span.y) > walkableClimb)
+                            continue;
+
+                        const int layerIndex = k - (int)neighborCell.index;
+                        if (layerIndex < 0 || layerIndex > maxLayers)
+                            continue;
+
+                        rcSetCon(span, dir, layerIndex);
+                        ++relaxed;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    return relaxed;
 }
 
 inline static void calcTriNormal(const float* v0, const float* v1, const float* v2, float* norm)
@@ -1037,7 +1183,8 @@ static void filterLedgeSpans(const int walkableHeight, const int walkableClimbTr
 // the supported lip floor. Per-tile JSON-gated (see the erode call site);
 // absent => stock rcErodeWalkableArea, so every other tile/map is unaffected.
 static bool erodeWalkableAreaZBanded(rcContext* context, int fullRadius, int bandRadius,
-    float bandMinWowZ, float bandMaxWowZ, rcCompactHeightfield& chf)
+    float bandMinWowZ, float bandMaxWowZ, int boxRadius, const std::vector<DebugStageCrop>& boxRadiusBoxes,
+    rcCompactHeightfield& chf)
 {
     const int w = chf.width;
     const int h = chf.height;
@@ -1156,9 +1303,10 @@ static bool erodeWalkableAreaZBanded(rcContext* context, int fullRadius, int ban
             }
         }
 
-    // Final null pass with a per-span, Z-banded erosion threshold.
+    // Final null pass with per-span scoped erosion thresholds.
     const unsigned char fullThresh = (unsigned char)(fullRadius * 2);
     const unsigned char bandThresh = (unsigned char)(bandRadius * 2);
+    const unsigned char boxThresh = (unsigned char)(boxRadius * 2);
     for (int y = 0; y < h; ++y)
         for (int x = 0; x < w; ++x)
         {
@@ -1166,9 +1314,12 @@ static bool erodeWalkableAreaZBanded(rcContext* context, int fullRadius, int ban
             for (int i = (int)c.index, ni = (int)(c.index + c.count); i < ni; ++i)
             {
                 if (chf.areas[i] == RC_NULL_AREA) continue;
-                const float worldZ = chf.bmin[1] + (float)chf.spans[i].y * chf.ch;
-                const unsigned char thresh =
+                const rcCompactSpan& span = chf.spans[i];
+                const float worldZ = chf.bmin[1] + (float)span.y * chf.ch;
+                unsigned char thresh =
                     (worldZ >= bandMinWowZ && worldZ <= bandMaxWowZ) ? bandThresh : fullThresh;
+                if (!boxRadiusBoxes.empty() && CompactSpanSurfaceInBoxes(chf, x, y, span, boxRadiusBoxes))
+                    thresh = (unsigned char)rcMin((int)thresh, (int)boxThresh);
                 if (dist[i] < thresh)
                     chf.areas[i] = RC_NULL_AREA;
             }
@@ -1498,6 +1649,10 @@ namespace MMAP
         // [WWoW-DIVERGENCE] tile-scoped under-deck dead-end excision (see
         // cullWalkableCompactSpansInBoxes). Absent => empty => no-op.
         const std::vector<DebugStageCrop> navCullBoxes = ReadNavCullBoxes(jsonTileConfig);
+        // [WWoW-DIVERGENCE] tile-scoped beam-tread preservation. Both lists
+        // are empty unless an opted-in tile declares the matching JSON keys.
+        const std::vector<DebugStageCrop> lowHeightRelaxBoxes = ReadWowBoxList(jsonTileConfig, "lowHeightRelaxBoxesWow");
+        const std::vector<DebugStageCrop> erosionRadiusBoxes = ReadWowBoxList(jsonTileConfig, "erosionRadiusBoxesWow");
         int const quickFromConfig = jsonTileConfig["quick"].get<int>();
         if (quickFromConfig >= 0)
             m_quick = quickFromConfig == 0 ? false : true;
@@ -1582,6 +1737,21 @@ namespace MMAP
 
         if (config.walkableHeight == 0)
             config.walkableHeight = (int)ceilf(agentHeight / config.ch);
+        int lowHeightRelaxWalkableHeight = config.walkableHeight;
+        if (jsonTileConfig.contains("lowHeightRelaxWalkableHeight"))
+        {
+            const float relaxedHeightWorld = jsonTileConfig["lowHeightRelaxWalkableHeight"].get<float>();
+            if (relaxedHeightWorld >= 0.0f)
+                lowHeightRelaxWalkableHeight = (int)ceilf(relaxedHeightWorld / config.ch);
+        }
+        if (jsonTileConfig.contains("lowHeightRelaxWalkableHeightCells"))
+        {
+            const int relaxedHeightCells = jsonTileConfig["lowHeightRelaxWalkableHeightCells"].get<int>();
+            if (relaxedHeightCells >= 0)
+                lowHeightRelaxWalkableHeight = relaxedHeightCells;
+        }
+        if (lowHeightRelaxWalkableHeight < 0)
+            lowHeightRelaxWalkableHeight = 0;
         if (config.walkableClimb == 0)
             config.walkableClimb = (int)floorf(agentMaxClimbModelTerrainTransition / config.ch); // For models
         uint32 walkableClimbTerrain = (int)floorf(agentMaxClimbTerrain / config.ch);
@@ -1608,6 +1778,21 @@ namespace MMAP
         }
         if (walkableErosionRadius < 0)
             walkableErosionRadius = 0;
+        int erosionBoxRadius = -1;
+        if (jsonTileConfig.contains("erosionBoxRadius"))
+        {
+            const float erosionBoxRadiusWorld = jsonTileConfig["erosionBoxRadius"].get<float>();
+            if (erosionBoxRadiusWorld >= 0.0f)
+                erosionBoxRadius = (int)ceilf(erosionBoxRadiusWorld / config.cs);
+        }
+        if (jsonTileConfig.contains("erosionBoxRadiusCells"))
+        {
+            const int erosionBoxRadiusCells = jsonTileConfig["erosionBoxRadiusCells"].get<int>();
+            if (erosionBoxRadiusCells >= 0)
+                erosionBoxRadius = erosionBoxRadiusCells;
+        }
+        if (erosionBoxRadius < -1)
+            erosionBoxRadius = -1;
         if (config.maxEdgeLen == 0)
             config.maxEdgeLen = (int)(12 / config.cs);
         if (config.borderSize == 0)
@@ -1784,7 +1969,18 @@ namespace MMAP
                 dumpHeightfieldColumn("removeUseless", dbgCellX, dbgCellY, *tile.solid);
                 if (m_debug)
                     WriteHeightfieldStageCsv("removeUseless", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
-                rcFilterWalkableLowHeightSpans(m_rcContext, tileCfg.walkableHeight, *tile.solid);
+                if (!lowHeightRelaxBoxes.empty() && lowHeightRelaxWalkableHeight < tileCfg.walkableHeight)
+                {
+                    const int preserved = filterWalkableLowHeightSpansBoxed(m_rcContext, tileCfg.walkableHeight,
+                        lowHeightRelaxWalkableHeight, lowHeightRelaxBoxes, *tile.solid);
+                    if (preserved > 0)
+                        printf("[LOWHEIGHT-BOX] map=%u tile=%u,%u sub=%d,%d fullCells=%d boxCells=%d preserved=%d\n",
+                               mapID, tileX, tileY, x, y, tileCfg.walkableHeight, lowHeightRelaxWalkableHeight, preserved);
+                }
+                else
+                {
+                    rcFilterWalkableLowHeightSpans(m_rcContext, tileCfg.walkableHeight, *tile.solid);
+                }
                 dumpHeightfieldColumn("filterLowHeight", dbgCellX, dbgCellY, *tile.solid);
                 if (m_debug)
                     WriteHeightfieldStageCsv("filterLowHeight", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
@@ -1806,6 +2002,14 @@ namespace MMAP
                     continue;
                 }
                 dumpCompactHeightfieldColumn("buildCHF", dbgCellX, dbgCellY, *tile.chf);
+                if (!lowHeightRelaxBoxes.empty() && lowHeightRelaxWalkableHeight < tileCfg.walkableHeight)
+                {
+                    const int relaxedLinks = relaxCompactHeightfieldConnectionsInBoxes(*tile.chf,
+                        lowHeightRelaxWalkableHeight, walkableClimbTerrain, lowHeightRelaxBoxes);
+                    if (relaxedLinks > 0)
+                        printf("[LOWHEIGHT-BOX-LINK] map=%u tile=%u,%u sub=%d,%d boxCells=%d relaxedLinks=%d\n",
+                               mapID, tileX, tileY, x, y, lowHeightRelaxWalkableHeight, relaxedLinks);
+                }
                 if (m_debug)
                     WriteCompactHeightfieldStageCsv("buildCHF", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
 
@@ -1820,19 +2024,30 @@ namespace MMAP
                 // other Z keep the full walkableErosionRadius. Absent => stock
                 // rcErodeWalkableArea (byte-identical for every non-opted tile).
                 bool erodeOk;
-                if (jsonTileConfig.contains("erosionBandRadius") &&
+                const bool hasErosionBand =
+                    jsonTileConfig.contains("erosionBandRadius") &&
                     jsonTileConfig.contains("erosionBandMinZ") &&
-                    jsonTileConfig.contains("erosionBandMaxZ"))
+                    jsonTileConfig.contains("erosionBandMaxZ");
+                const bool hasErosionBox = !erosionRadiusBoxes.empty() && erosionBoxRadius >= 0;
+                if (hasErosionBand || hasErosionBox)
                 {
-                    const float bandRadiusWorld = jsonTileConfig["erosionBandRadius"].get<float>();
-                    const float bandMinZ = jsonTileConfig["erosionBandMinZ"].get<float>();
-                    const float bandMaxZ = jsonTileConfig["erosionBandMaxZ"].get<float>();
-                    int bandRadiusCells = (int)ceilf(bandRadiusWorld / config.cs);
-                    if (bandRadiusCells < 0) bandRadiusCells = 0;
-                    printf("[ERODE-BAND] map=%u tile=%u,%u fullCells=%d bandCells=%d bandZ=[%.2f,%.2f] cs=%.4f\n",
-                           mapID, tileX, tileY, walkableErosionRadius, bandRadiusCells, bandMinZ, bandMaxZ, config.cs);
+                    int bandRadiusCells = walkableErosionRadius;
+                    float bandMinZ = 1.0f;
+                    float bandMaxZ = 0.0f;
+                    if (hasErosionBand)
+                    {
+                        const float bandRadiusWorld = jsonTileConfig["erosionBandRadius"].get<float>();
+                        bandMinZ = jsonTileConfig["erosionBandMinZ"].get<float>();
+                        bandMaxZ = jsonTileConfig["erosionBandMaxZ"].get<float>();
+                        bandRadiusCells = (int)ceilf(bandRadiusWorld / config.cs);
+                        if (bandRadiusCells < 0) bandRadiusCells = 0;
+                    }
+                    const int scopedBoxRadius = hasErosionBox ? erosionBoxRadius : walkableErosionRadius;
+                    printf("[ERODE-SCOPED] map=%u tile=%u,%u fullCells=%d bandCells=%d bandZ=[%.2f,%.2f] boxCells=%d boxCount=%zu cs=%.4f\n",
+                           mapID, tileX, tileY, walkableErosionRadius, bandRadiusCells, bandMinZ, bandMaxZ,
+                           scopedBoxRadius, erosionRadiusBoxes.size(), config.cs);
                     erodeOk = erodeWalkableAreaZBanded(m_rcContext, walkableErosionRadius, bandRadiusCells,
-                                                       bandMinZ, bandMaxZ, *tile.chf);
+                                                       bandMinZ, bandMaxZ, scopedBoxRadius, erosionRadiusBoxes, *tile.chf);
                 }
                 else
                 {
