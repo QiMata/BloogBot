@@ -22,15 +22,24 @@ public class TravelTask : BotTask, IBotTask
 {
     private const int MaxReplans = 3;
     private const float DefaultArrivalRadius = 5.0f;
-    // 2D radius at which a plain walk leg "arrives" and hands the remainder to the
-    // Standard-policy close-range approach. Was 15y, but that handed off ~13y short
-    // of Frezza while the bot was still on the spiral/deck-edge -- the close-range
-    // approach then drove straight at Frezza's XY across the deck edge and fell off.
-    // Tightened to 5y (== DefaultArrivalRadius) so the navmesh-following leg drives
+    // 2D radius for transport-handoff detection (WalkLegHandsOffToTransport),
+    // flight-master approach (ExecuteFlightPathLeg), and transport/elevator EXIT
+    // arrival (HasReachedTransportExit). Kept at the legacy 15y -- those flows
+    // legitimately register "close enough" well before the exact point, and
+    // tightening this broke nothing there. NOTE: plain walk-leg COMPLETION does NOT
+    // use this -- it uses the tighter WalkLegFinalArrivalRadius below.
+    private const float WalkLegArrivalRadius = 15.0f;
+    // 2D radius at which a plain (non-transport) walk leg COMPLETES and hands the
+    // remainder to the Standard-policy close-range approach. Was 15y, but that handed
+    // off ~13y short of Frezza while the bot was still on the spiral/deck-edge -- the
+    // close-range approach then drove straight at Frezza's XY across the deck edge and
+    // fell off. 5y (== DefaultArrivalRadius) keeps the navmesh-following leg driving
     // all the way onto the deck to near Frezza before handing off, leaving only a
-    // short, on-tier close-range step. Pairs with the 2y vertical-tier guard below.
-    // (2026-06-04: OG zeppelin deck-lip arrival.)
-    private const float WalkLegArrivalRadius = 5.0f;
+    // short on-tier step. Scoped to plain-leg completion (GetWalkLegArrivalRadius)
+    // so transport/flight handoff + exit detection (WalkLegArrivalRadius) are
+    // unchanged. Pairs with the 2y vertical-tier guard below. (2026-06-04: OG
+    // zeppelin deck-lip arrival.)
+    private const float WalkLegFinalArrivalRadius = 5.0f;
     // A plain (non-transport) walk leg only "arrives" when the bot is within the
     // 2D radius AND on roughly the same vertical layer as leg.End. Without this,
     // a destination directly above the bot (deck / tower / upper floor) within
@@ -506,7 +515,7 @@ public class TravelTask : BotTask, IBotTask
     private float GetWalkLegArrivalRadius(RouteLeg leg)
     {
         if (!WalkLegHandsOffToTransport(leg))
-            return WalkLegArrivalRadius;
+            return WalkLegFinalArrivalRadius;
 
         // Phase 5.3.5+: when native off-mesh boarding is active, the walk leg
         // is judged against the configured boarding zone rather than a narrow
