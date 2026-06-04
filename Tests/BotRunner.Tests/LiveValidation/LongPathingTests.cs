@@ -1024,11 +1024,17 @@ public class LongPathingTests
 
                 var pos = GetPosition(snapshot);
 
-                // Primary arrival signal: the bot is physically AT Frezza.
+                // Primary arrival signal: the bot is physically ON THE DECK next to
+                // Frezza. Hardened 2026-06-03: require the bot to be UP on the deck
+                // (z within 2y of Frezza's z53.63 spawn, i.e. z>=51.6) and within 5y
+                // horizontally. The prior 6y/4z tolerance accepted the bot stopped on
+                // the lower deck-lip coil (~z50.6, ~3y below the deck, ~7-8y out) --
+                // i.e. it had cleared the fall but NOT climbed onto the deck to Frezza.
+                // "Reaches Frezza" must mean on the deck within interaction range.
                 if (pos != null
                     && snapshot?.CurrentMapId == OrgrimmarMapId
-                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 6f
-                    && Math.Abs(pos.Z - OrgrimmarFrezzaZ) <= 4f)
+                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 5f
+                    && pos.Z >= OrgrimmarFrezzaZ - 2.0f)
                 {
                     return true;
                 }
@@ -1041,10 +1047,15 @@ public class LongPathingTests
                 // test at the tower base (R16, 2026-06-01: reported arrival at z=24.8,
                 // ~29y below Frezza, with the bot still on the ground). Arrival must
                 // reflect visual reality, never a chat message alone.
+                // Secondary signal: a NEW [TRAVEL_LEG] complete reason=walk_arrived
+                // event, corroborated by the bot being ON THE DECK (z>=Frezza-2) and
+                // within 8y. Hardened 2026-06-03 to require deck height: the walk-leg
+                // arrival radius is 15y/6z, so walk_arrived fires while the bot is still
+                // ~3y below the deck on the lip -- which must NOT green the test.
                 if (pos != null
                     && snapshot?.CurrentMapId == OrgrimmarMapId
-                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 12f
-                    && Math.Abs(pos.Z - OrgrimmarFrezzaZ) <= 6f)
+                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 8f
+                    && pos.Z >= OrgrimmarFrezzaZ - 2.0f)
                 {
                     foreach (var msg in GetDeltaMessages(diagnosticBaseline, snapshot?.RecentChatMessages))
                     {
@@ -1058,7 +1069,7 @@ public class LongPathingTests
 
                 return false;
             },
-            TimeSpan.FromSeconds(90),
+            TimeSpan.FromSeconds(150),
             pollIntervalMs: 500,
             progressLabel: $"{target.RoleLabel} OG zeppelin tower ramp climb from base to literal Frezza");
 

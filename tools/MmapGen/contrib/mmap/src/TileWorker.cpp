@@ -718,6 +718,82 @@ static void WriteContourStageCsv(uint32 mapID, uint32 tileX, uint32 tileY, int s
     fclose(file);
 }
 
+// [WWoW-DIVERGENCE] Tile-scoped navmesh excision of a walkable surface that is
+// geometrically VALID by every Recast rule (real, gently-sloped WMO floor that
+// passes the slope test, filterLedgeSpans, low-height and erosion) yet is a
+// gameplay dead-end the live pathfinder gets trapped on.
+//
+// OG zeppelin tower (tile 4029): the spiral ramp's top wraps physically continue
+// WEST *under* Frezza's deck overhang -- the deck (z~53.6) sits directly above
+// the ramp tongue (z~50.5) with an unclimbable ~3y vertical gap and no walkable
+// bridge up. Recast bakes that under-deck tongue as a normal walkable poly. It is
+// XY-closer to Frezza than the legitimate route, so the live NavigationPath drifts
+// the bot onto it and wedges it against the deck riser (live snapshot: pinned at
+// (1337.56,-4650.75,50.47), currentSpeed=0, degenerate 1-waypoint re-path). There
+// is no slope/ledge/erosion stage that "should" reject it -- it is solid, well
+// supported floor -- so the only correct bake action is to delete the under-deck
+// half outright. The legitimate climb corridor (WoW X>=1340) and the NE deck
+// junction lie EAST of the cull box, so excising the box is route-neutral for them
+// (verified: no legit Grunt->Frezza corner enters X<1339.3 at z[48.7,52.3]).
+//
+// The cull runs on the COMPACT heightfield AFTER erosion+median so the final west
+// edge is fixed -- it never gets re-widened by erosion into the climb. JSON-gated
+// per tile via "navCullBoxesWow" (a list of WoW [minX,minY,minZ,maxX,maxY,maxZ]
+// AABBs); absent on every other tile => no-op, byte-identical bake. Boxes reuse
+// the DebugStageCrop AABB representation (recastX<-WoWY, recastZ<-WoWX, height<-WoWZ).
+static std::vector<DebugStageCrop> ReadNavCullBoxes(const json& jsonTileConfig)
+{
+    std::vector<DebugStageCrop> boxes;
+    auto it = jsonTileConfig.find("navCullBoxesWow");
+    if (it != jsonTileConfig.end() && it->is_array())
+    {
+        for (const json& wowBox : *it)
+        {
+            DebugStageCrop box = ParseDebugStageCropWow(wowBox);
+            if (box.enabled)
+                boxes.push_back(box);
+        }
+    }
+    return boxes;
+}
+
+static int cullWalkableCompactSpansInBoxes(rcCompactHeightfield& chf, const std::vector<DebugStageCrop>& boxes)
+{
+    if (boxes.empty())
+        return 0;
+
+    int culled = 0;
+    for (int y = 0; y < chf.height; ++y)
+    {
+        const float cellMinZ = chf.bmin[2] + y * chf.cs;
+        const float cellMaxZ = cellMinZ + chf.cs;
+        for (int x = 0; x < chf.width; ++x)
+        {
+            const float cellMinX = chf.bmin[0] + x * chf.cs;
+            const float cellMaxX = cellMinX + chf.cs;
+            const rcCompactCell& cell = chf.cells[x + y * chf.width];
+            for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+            {
+                if (chf.areas[i] == RC_NULL_AREA)
+                    continue;
+                // Compact span floor Z (the surface the agent stands on).
+                const float spanHeight = chf.bmin[1] + (float)chf.spans[i].y * chf.ch;
+                for (const DebugStageCrop& box : boxes)
+                {
+                    if (IntersectsDebugCrop2D(cellMinX, cellMaxX, cellMinZ, cellMaxZ, box)
+                        && IntersectsDebugCropHeight(spanHeight, spanHeight, box))
+                    {
+                        chf.areas[i] = RC_NULL_AREA;
+                        ++culled;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    return culled;
+}
+
 inline static void calcTriNormal(const float* v0, const float* v1, const float* v2, float* norm)
 {
     float e0[3], e1[3];
@@ -1419,6 +1495,9 @@ namespace MMAP
         const std::vector<DebugStageCrop> debugStageCrops = ReadDebugStageCrops(jsonTileConfig);
         if (m_debug && !debugStageCrops.empty())
             ResetDebugStageFiles(mapID, tileX, tileY);
+        // [WWoW-DIVERGENCE] tile-scoped under-deck dead-end excision (see
+        // cullWalkableCompactSpansInBoxes). Absent => empty => no-op.
+        const std::vector<DebugStageCrop> navCullBoxes = ReadNavCullBoxes(jsonTileConfig);
         int const quickFromConfig = jsonTileConfig["quick"].get<int>();
         if (quickFromConfig >= 0)
             m_quick = quickFromConfig == 0 ? false : true;
@@ -1775,6 +1854,18 @@ namespace MMAP
                 }
                 if (m_debug)
                     WriteCompactHeightfieldStageCsv("median", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
+
+                // [WWoW-DIVERGENCE] Excise tile-scoped under-deck dead-end spans
+                // AFTER erosion+median (final west edge, no erosion re-widening)
+                // and BEFORE region/contour so the trapped poly is never cast.
+                {
+                    const int culled = cullWalkableCompactSpansInBoxes(*tile.chf, navCullBoxes);
+                    if (culled > 0)
+                        printf("[NAVCULL] map=%u tile=%u,%u sub=%d,%d: culled %d walkable compact span(s)\n",
+                               mapID, tileX, tileY, x, y, culled);
+                }
+                if (m_debug)
+                    WriteCompactHeightfieldStageCsv("navcull", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
 
                 const RegionPartitionType partitionType = ParseRegionPartitionType(jsonTileConfig);
                 if (partitionType == RegionPartitionType::Watershed)
