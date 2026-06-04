@@ -45,6 +45,9 @@ public class LongPathingTests
     private const float OrgrimmarZeppelinBoardingX = 1320.142944f;
     private const float OrgrimmarZeppelinBoardingY = -4653.158691f;
     private const float OrgrimmarZeppelinBoardingZ = 53.891945f;
+    private const float OrgrimmarWindriderTowerDescentX = 1604.8f;
+    private const float OrgrimmarWindriderTowerDescentY = -4425.6f;
+    private const float OrgrimmarWindriderTowerDescentZ = 10.36f;
     private const float OrgrimmarZeppelinBoardingFallZTolerance = 12f;
     private const float OrgrimmarUndercityZeppelinDeckOffsetX = -12.580913f;
     private const float OrgrimmarUndercityZeppelinDeckOffsetY = -7.983256f;
@@ -71,6 +74,8 @@ public class LongPathingTests
     private const string DeckLipClimbEnvVar = "WWOW_DECKLIP_CLIMB_TEST";
     private const string DeckLipDirectBoardingEnvVar = "WWOW_DECKLIP_DIRECT_BOARDING_TEST";
     private const string BrmDungeonTravelEnvVar = "WWOW_BRM_DUNGEON_TRAVEL_TEST";
+    private const string OrgrimmarWindriderTowerDescentStage = "orgrimmar.windrider_tower.descent";
+    private const string OrgrimmarUndercityBoardingPlatformStage = "orgrimmar.undercity_zeppelin.boarding_platform";
     private const string OrgrimmarZeppelinBoardingWaitAreaName = "OrgrimmarUndercityZeppelinBoardingPlatform";
     private const ulong OrgrimmarZeppelinBoardingTargetPolyRef = 0x1000015201B41UL;
     private const int OrgrimmarZeppelinBoardingTargetPolyIndex = 6977;
@@ -320,6 +325,8 @@ public class LongPathingTests
             target.AccountName,
             message => message.Contains("[TRAVEL_PLAN]", StringComparison.Ordinal)
                 && message.Contains("FlightPath(25->23)", StringComparison.Ordinal)
+                && message.Contains($"Walk({OrgrimmarWindriderTowerDescentStage})", StringComparison.Ordinal)
+                && message.Contains($"Walk({OrgrimmarUndercityBoardingPlatformStage})", StringComparison.Ordinal)
                 && message.Contains("Zeppelin", StringComparison.Ordinal),
             diagnosticBaseline,
             TimeSpan.FromSeconds(45),
@@ -327,7 +334,7 @@ public class LongPathingTests
         await AssertOrScreenshotAsync(
             planSeen,
             target.AccountName,
-            "TravelTo should emit a staged plan containing Crossroads taxi 25->23 and a zeppelin leg.");
+            "TravelTo should emit a staged plan containing Crossroads taxi 25->23, the named Orgrimmar zeppelin approach, and a zeppelin leg.");
         await _bot.RefreshSnapshotsAsync();
         CaptureTimelineCheckpoint(
             TimelineTestName,
@@ -396,18 +403,32 @@ public class LongPathingTests
 
         var sawOrgrimmarPathfindingWalk = await WaitForTravelDiagnosticAsync(
             target.AccountName,
-            message => IsPathfindingWalkDiagnosticFor(
-                message,
-                OrgrimmarZeppelinRouteTargetX,
-                OrgrimmarZeppelinRouteTargetY,
-                OrgrimmarZeppelinRouteTargetZ),
+            message =>
+                message.Contains("[TRAVEL_LEG] start", StringComparison.Ordinal)
+                && message.Contains("type=Walk", StringComparison.Ordinal)
+                && message.Contains($"stage={OrgrimmarWindriderTowerDescentStage}", StringComparison.Ordinal),
             diagnosticBaseline,
             TimeSpan.FromSeconds(90),
-            $"{target.RoleLabel} Orgrimmar pathfinding walk");
+            $"{target.RoleLabel} Orgrimmar staged pathfinding walk");
         await AssertOrScreenshotAsync(
             sawOrgrimmarPathfindingWalk,
             target.AccountName,
-            "Expected TravelTask to use a PathfindingService-generated route from Orgrimmar flight-master area to the zeppelin tower.");
+            "Expected TravelTask to start the named Orgrimmar windrider-tower descent stage after the Crossroads -> Orgrimmar flight.");
+
+        var sawOrgrimmarFirstStageNavigation = await WaitForTravelDiagnosticAsync(
+            target.AccountName,
+            message => IsPathfindingWalkDiagnosticFor(
+                message,
+                OrgrimmarWindriderTowerDescentX,
+                OrgrimmarWindriderTowerDescentY,
+                OrgrimmarWindriderTowerDescentZ),
+            diagnosticBaseline,
+            TimeSpan.FromSeconds(45),
+            $"{target.RoleLabel} Orgrimmar descent pathfinding route");
+        await AssertOrScreenshotAsync(
+            sawOrgrimmarFirstStageNavigation,
+            target.AccountName,
+            "Expected TravelTask to use PathfindingService for the windrider-tower descent stage.");
         await _bot.RefreshSnapshotsAsync();
         CaptureTimelineCheckpoint(
             TimelineTestName,
