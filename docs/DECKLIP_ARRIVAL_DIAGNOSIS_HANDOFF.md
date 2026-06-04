@@ -55,7 +55,50 @@ correctly FAILS). Tile 4029 = map1 tile 40,29 = `mmaps/0012940.mmtile`.
   `ClimbOrgrimmarTowerToFrezza`). Fixing the bake to remove the tongue is only
   correct if the NE route is simultaneously made live-traversable.
 
-## Next-iteration plan
+## ITER 2 (2026-06-04) — the navmesh PATH is proven correct; the drift is a consumer reaction to local geometry
+- **Probe from the z47.5 hand-off point** `(1345.4,-4652.6,47.5)` → Frezza
+  (`--detour-resolve --smooth`): **28 segs, 0 Blocked**, stays on the corridor
+  (min X at z49–52 = **1339.97**, never the tongue X1337), climbs the NE junction
+  to the deck (z54.06) and walks to Frezza (z53.63). So the navmesh path is
+  correct **from every start point**, not just from Grunt.
+- **Live trace** (baseline diag + poll `[TRAVEL_WALK_NAV]` window dumps): it is a
+  SINGLE leg; the walk-nav drive follows the 95-corner path correctly to **idx≈68
+  (z47.5–48.3, X1344–1348)** — last waypoint-query at z47.5 correctly points NE to
+  (1344.1,-4653.9,48.6), hdgErr=0.23, moving fine. Then **ALL NAV/TRAVEL logging
+  stops for ~4.2 s** (the "leg transition") while the bot moves to the tongue
+  (1337.6,-4650.8,50.5). No existing log captures the drift window.
+- **Mechanism (consumer, NavigationPath.cs):** `GetNextWaypoint` has many
+  `ResolveDirectFallback` exits (aim straight at the destination = Frezza, west)
+  and `TryReplanFromNearVerticalLayerMismatch` →
+  `TryPromoteLongTravelDestinationProgressWaypoint` (promote a waypoint *toward
+  Frezza*). At the stall the path recalcs to `waypointCount=1`
+  (`reason=stalled_near_waypoint`). The drift toward Frezza's XY (west) lands on
+  the tongue (baseline) or the void (iter-1 cull → fall).
+- **The bake↔consumer bridge (the only real bake-side lever):**
+  `TryReplanFromNearVerticalLayerMismatch` only SUPPRESSES the destination-ward
+  promotion when `IsUphillLayerProgression(...) && PreservesWalkableCorridor(...)`.
+  `PreservesWalkableCorridor` = local-physics-consistent
+  (`MaxUpwardRouteZDelta <= LOCAL_PHYSICS_ROUTE_LAYER_REJECT_Z_DELTA=5`) **&&**
+  collision-support **&&** `IsSegmentWideEnoughForCharacter` **&&**
+  `HasWalkableNavmeshSamples`. All four are NAVMESH-determined. So if the corridor
+  near z48–52 is too narrow, has a too-tall poly Z-step, or lacks collision
+  support, the consumer treats it as a layer mismatch and promotes the bot toward
+  Frezza (→ tongue). A tile-scoped bake refinement (wider + finer-Z-stepped
+  corridor / making the climb a clean uphill layer progression) keeps these true
+  and the bot on the corridor — WITHOUT touching the consumer.
+- **Constraint reality:** the user forbids consumer changes, but the navmesh PATH
+  is already correct. The bake fix must therefore target the LOCAL geometry the
+  consumer samples (`PreservesWalkableCorridor`/`IsUphillLayerProgression`), not
+  the global path. The exact failing predicate is not yet pinned — it needs
+  instrumentation (next).
+
+## Next-iteration plan (iter 3)
+0. **Instrument first (temporary diagnostic, not a band-aid):** add log lines in
+   `TryReplanFromNearVerticalLayerMismatch` (which predicate of
+   `PreservesWalkableCorridor` returns false, and the promoted waypoint),
+   `ResolveDirectFallback`, and the corridor-drift replan. Re-run the baseline
+   live test, capture the **drift window** (idx≈68→tongue), and identify WHICH
+   navmesh-sampled check fails at the exact drift point. Then revert the logging.
 1. Diagnose the **NE-junction→deck transition** the live path avoids: trace the
    second leg (post-z47.5) — `NAV_EXEC`/`NAV_TELEM` stop at the leg transition,
    so add/inspect second-leg telemetry. Use `mmo-movement-diagnostics`.
