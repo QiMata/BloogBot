@@ -575,7 +575,11 @@ public class TravelTask : BotTask, IBotTask
             return;
         }
 
-        _transportLogic ??= new TransportWaitingLogic(leg.Transport, leg.BoardStop, leg.ExitStop);
+        _transportLogic ??= new TransportWaitingLogic(
+            leg.Transport,
+            leg.BoardStop,
+            leg.ExitStop,
+            GetStableTransportWaitKey(player));
         var nearbyObjects = PathfindingOverlayBuilder.BuildNearbyObjects(
             ObjectManager,
             player.Position,
@@ -699,8 +703,11 @@ public class TravelTask : BotTask, IBotTask
         ResetTransportTraceMarkers();
         ResetTransportBoardingProgressMarkers();
 
+        var stage = string.IsNullOrWhiteSpace(leg.StageName)
+            ? string.Empty
+            : $" stage={leg.StageName}";
         EmitTravelDiagnostic(
-            $"[TRAVEL_LEG] start index={index} type={leg.Type} map={leg.MapId} end=({leg.End.X:F1},{leg.End.Y:F1},{leg.End.Z:F1})");
+            $"[TRAVEL_LEG] start index={index} type={leg.Type}{stage} map={leg.MapId} end=({leg.End.X:F1},{leg.End.Y:F1},{leg.End.Z:F1})");
     }
 
     private void CompleteCurrentLeg(string reason)
@@ -1166,6 +1173,16 @@ public class TravelTask : BotTask, IBotTask
         => player.TransportGuid != 0
             || (player.MovementFlags & MovementFlags.MOVEFLAG_ONTRANSPORT) != 0;
 
+    private static string? GetStableTransportWaitKey(IWoWLocalPlayer player)
+    {
+        if (player.Guid != 0)
+            return $"guid:{player.Guid:X16}";
+
+        return string.IsNullOrWhiteSpace(player.Name)
+            ? null
+            : $"name:{player.Name}";
+    }
+
     private static bool IsCrossMapTransportLeg(RouteLeg leg)
         => leg.Transport != null
             && leg.BoardStop != null
@@ -1313,7 +1330,9 @@ public class TravelTask : BotTask, IBotTask
         => string.Join(" -> ", route.Select(DescribeLeg));
 
     private static string DescribeLeg(RouteLeg leg)
-        => leg.Type switch
+        => !string.IsNullOrWhiteSpace(leg.StageName)
+            ? $"{leg.Type}({leg.StageName})"
+            : leg.Type switch
         {
             TransitionType.FlightPath => $"FlightPath({leg.FlightStartNodeId}->{leg.FlightEndNodeId})",
             TransitionType.Zeppelin or TransitionType.Boat or TransitionType.Elevator =>

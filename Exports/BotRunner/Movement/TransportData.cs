@@ -15,6 +15,23 @@ public static class TransportData
     public enum TransportType { Elevator, Boat, Zeppelin }
 
     /// <summary>
+    /// A named world waypoint that describes how to reach a transport stop.
+    /// </summary>
+    public record TransportApproachPoint(
+        string Name,
+        Position Position);
+
+    /// <summary>
+    /// A known waitable navmesh surface for a transport stop.
+    /// </summary>
+    public record TransportWaitSurface(
+        string Name,
+        ulong PolygonRef,
+        int PolygonIndex,
+        Position Center,
+        float SampleRadius);
+
+    /// <summary>
     /// A boarding/disembarking point for a transport.
     /// </summary>
     public record TransportStop(
@@ -24,9 +41,53 @@ public static class TransportData
         float BoardingRadius,     // How close = "at the stop"
         Position? BoardingPosition = null, // Optional fixed world staging point near an offset transport deck
         Position? TransportBoardingOffset = null, // Optional post-attachment local-space point to stand on the transport model
-        Position? ApproachPosition = null) // Optional generated-navigation staging point before final boarding
+        Position? ApproachPosition = null, // Optional generated-navigation staging point before final boarding
+        TransportApproachPoint[]? ApproachRoute = null, // Optional ordered long-travel approach route
+        TransportWaitSurface? WaitSurface = null) // Optional waitable navmesh surface for random standing points
     {
         public Position NavigationPosition => ApproachPosition ?? WaitPosition;
+
+        public Position NavigationEndpoint =>
+            ApproachRoute is { Length: > 0 }
+                ? ApproachRoute[^1].Position
+                : NavigationPosition;
+
+        public Position ResolveWaitPosition(string? stableKey = null)
+        {
+            if (WaitSurface == null || string.IsNullOrWhiteSpace(stableKey))
+                return NavigationPosition;
+
+            var hashInput = $"{stableKey}|{WaitSurface.Name}|{WaitSurface.PolygonRef:X16}";
+            var angle = ToUnitFloat(StableHash($"{hashInput}|angle")) * MathF.PI * 2f;
+            var radius = MathF.Sqrt(ToUnitFloat(StableHash($"{hashInput}|radius")))
+                * MathF.Max(0f, WaitSurface.SampleRadius);
+
+            return new Position(
+                WaitSurface.Center.X + MathF.Cos(angle) * radius,
+                WaitSurface.Center.Y + MathF.Sin(angle) * radius,
+                WaitSurface.Center.Z);
+        }
+
+        private static uint StableHash(string value)
+        {
+            const uint offset = 2166136261;
+            const uint prime = 16777619;
+
+            unchecked
+            {
+                var hash = offset;
+                foreach (var c in value)
+                {
+                    hash ^= c;
+                    hash *= prime;
+                }
+
+                return hash;
+            }
+        }
+
+        private static float ToUnitFloat(uint value)
+            => (value + 0.5f) / 4294967296f;
     }
 
     /// <summary>
@@ -180,15 +241,37 @@ public static class TransportData
                 // DBC path 302 stops the model at (1318.107,-4658.047,71.860);
                 // zepplin-riding.jpg captures a stable post-attachment center-deck transport-local offset.
                 TransportBoardingOffset: new Position(-12.580913f, -7.983256f, -16.398277f),
-                // Route the long walk leg directly to the gangplank-side
-                // boarding zone. The prior Frezza deck anchor encouraged the
-                // raw Detour corridor to hug the back/side of Orgrimmar before
-                // climbing, which is both farther from the actual zeppelin
-                // tower entrance and more sensitive to live seasonal props.
-                // Keeping NavigationPosition aligned with BoardingPosition lets
-                // route packs and dynamic-overlay requests target the same
-                // front-side corridor the bot should physically board from.
-                ApproachPosition: new Position(1320.142944f, -4653.158691f, 53.891945f)),
+                ApproachPosition: new Position(1320.142944f, -4653.158691f, 53.891945f),
+                ApproachRoute:
+                [
+                    new(
+                        "orgrimmar.windrider_tower.descent",
+                        new Position(1604.8f, -4425.6f, 10.36f)),
+                    new(
+                        "orgrimmar.front_gate.hallway_exit",
+                        new Position(1491.4f, -4417.3f, 23.3f)),
+                    new(
+                        "durotar.exterior_incline",
+                        new Position(1381.3f, -4370.6f, 26.0f)),
+                    new(
+                        "orgrimmar.zeppelin_tower.lower_approach",
+                        new Position(1356.8f, -4501.3f, 29.44f)),
+                    new(
+                        "orgrimmar.zeppelin_tower.base",
+                        new Position(1342.4f, -4652.1f, 24.6f)),
+                    new(
+                        "orgrimmar.zeppelin_tower.frezza_deck",
+                        new Position(1331.11f, -4649.45f, 53.6269f)),
+                    new(
+                        "orgrimmar.undercity_zeppelin.boarding_platform",
+                        new Position(1320.142944f, -4653.158691f, 53.891945f)),
+                ],
+                WaitSurface: new TransportWaitSurface(
+                    "OrgrimmarUndercityZeppelinBoardingPlatform",
+                    PolygonRef: 0x1000015201B41UL,
+                    PolygonIndex: 6977,
+                    Center: new Position(1320.142944f, -4653.158691f, 53.891945f),
+                    SampleRadius: 4.0f)),
             new(
                 "Undercity Zeppelin Tower",
                 0,

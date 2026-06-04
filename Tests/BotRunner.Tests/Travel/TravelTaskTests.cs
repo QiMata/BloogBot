@@ -350,10 +350,7 @@ public class TravelTaskTests
 
         var crossroads = new Position(-437.0f, -2596.0f, 96.0f);
         var orgrimmarFlightMaster = new Position(1677.0f, -4315.0f, 62.0f);
-        // The live Orgrimmar zeppelin handoff should complete at the front
-        // boarding zone so the walk leg and boarding logic share the same
-        // gangplank-side target.
-        var liveApproachPosition = TransportData.ZeppelinUndercityOrgrimmar.Stops[0].NavigationPosition;
+        var approachRoute = TransportData.ZeppelinUndercityOrgrimmar.Stops[0].ApproachRoute!;
         var undercityTarget = new Position(1584.0f, 242.0f, -52.0f);
         var playerPosition = crossroads;
         var mapId = 1u;
@@ -426,13 +423,17 @@ public class TravelTaskTests
         task.Update();
         task.Update();
 
-        playerPosition = liveApproachPosition;
         mounted = false;
-        task.Update();
+        foreach (var approachPoint in approachRoute)
+        {
+            playerPosition = approachPoint.Position;
+            task.Update();
+        }
+
         task.Update();
 
-        Assert.Contains(diagnostics, message => message.Contains("complete index=1 reason=walk_arrived", StringComparison.Ordinal));
-        Assert.Contains(diagnostics, message => message.Contains("start index=2 type=Zeppelin", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("stage=orgrimmar.undercity_zeppelin.boarding_platform", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("type=Zeppelin", StringComparison.Ordinal));
         Assert.Same(task, taskStack.Peek());
     }
 
@@ -444,7 +445,7 @@ public class TravelTaskTests
 
         var crossroads = new Position(-437.0f, -2596.0f, 96.0f);
         var orgrimmarFlightMaster = new Position(1677.0f, -4315.0f, 62.0f);
-        var liveBoardingPosition = new Position(1320.142944f, -4653.158691f, 53.891945f);
+        var approachRoute = TransportData.ZeppelinUndercityOrgrimmar.Stops[0].ApproachRoute!;
         var undercityTarget = new Position(1584.0f, 242.0f, -52.0f);
         var playerPosition = crossroads;
         var mapId = 1u;
@@ -517,13 +518,17 @@ public class TravelTaskTests
         task.Update();
         task.Update();
 
-        playerPosition = liveBoardingPosition;
         mounted = false;
-        task.Update();
+        foreach (var approachPoint in approachRoute)
+        {
+            playerPosition = approachPoint.Position;
+            task.Update();
+        }
+
         task.Update();
 
-        Assert.Contains(diagnostics, message => message.Contains("complete index=1 reason=walk_arrived", StringComparison.Ordinal));
-        Assert.Contains(diagnostics, message => message.Contains("start index=2 type=Zeppelin", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("stage=orgrimmar.undercity_zeppelin.boarding_platform", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("type=Zeppelin", StringComparison.Ordinal));
         Assert.Same(task, taskStack.Peek());
     }
 

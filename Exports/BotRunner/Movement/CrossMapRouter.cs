@@ -22,7 +22,8 @@ public record RouteLeg(
     TransportStop? ExitStop,
     uint? FlightStartNodeId,
     uint? FlightEndNodeId,
-    float EstimatedTimeSec);
+    float EstimatedTimeSec,
+    string? StageName = null);
 
 /// <summary>
 /// High-level route planner: given (startMap, startPos) → (destMap, destPos),
@@ -239,19 +240,11 @@ public class CrossMapRouter
         var legs = new List<RouteLeg>();
         var endpoints = ResolveTransitionEndpoints(transition);
 
-        // Leg 1: Walk to the transition departure point
-        float walkDist1 = Distance3D(startPos, endpoints.FromPos);
-        if (walkDist1 > 5f)
-        {
-            legs.Add(new RouteLeg(TransitionType.Walk, startMapId, startPos, endpoints.FromPos,
-                null, null, null, null, null, walkDist1 / WALK_SPEED));
-        }
+        // Leg 1: Walk through the transition's named approach route.
+        AppendApproachWalkLegs(legs, startMapId, startPos, endpoints);
 
         // Leg 2: The transition itself (boat, zeppelin, dungeon portal)
-        legs.Add(new RouteLeg(transition.Type, startMapId,
-            endpoints.FromPos, endpoints.ToPos,
-            transition.Transport, endpoints.BoardStop, endpoints.ExitStop,
-            null, null, transition.EstimatedTransitTimeSec));
+        legs.Add(MakeTransitionLeg(transition, endpoints));
 
         // Leg 3: Walk from arrival to destination
         float walkDist2 = Distance3D(endpoints.ToPos, destPos);
@@ -302,8 +295,8 @@ public class CrossMapRouter
 
             var transitionNodePos = ToPosition(transitionNode);
             var walkToSource = Distance2D(startPos, sourceNodePos);
-            var walkFromDestinationNode = Distance2D(transitionNodePos, endpoints.FromPos);
-            var directWalkToTransition = Distance2D(startPos, endpoints.FromPos);
+            var walkFromDestinationNode = EstimateApproachWalkDistance(transitionNodePos, endpoints);
+            var directWalkToTransition = EstimateApproachWalkDistance(startPos, endpoints);
 
             // Keep taxis for material same-continent staging gains, not tiny detours.
             if (walkToSource + walkFromDestinationNode >= directWalkToTransition * 0.85f)
@@ -320,13 +313,9 @@ public class CrossMapRouter
             route.Add(new RouteLeg(TransitionType.FlightPath, startMapId, sourceNodePos, transitionNodePos,
                 null, null, null, sourceNode.NodeId, transitionNode.NodeId, flightTime));
 
-            if (walkFromDestinationNode > 5f)
-            {
-                route.Add(new RouteLeg(TransitionType.Walk, startMapId, transitionNodePos, endpoints.FromPos,
-                    null, null, null, null, null, walkFromDestinationNode / WALK_SPEED));
-            }
+            AppendApproachWalkLegs(route, startMapId, transitionNodePos, endpoints);
 
-            route.Add(MakeTransitionLeg(transition));
+            route.Add(MakeTransitionLeg(transition, endpoints));
 
             var walkToDestination = Distance3D(endpoints.ToPos, destPos);
             if (walkToDestination > 5f)
@@ -360,48 +349,24 @@ public class CrossMapRouter
             if (leg2 == null) continue;
             var leg2Endpoints = ResolveTransitionEndpoints(leg2);
 
-            // Estimate total cost
-            float walk1 = Distance3D(startPos, leg1Endpoints.FromPos) / WALK_SPEED;
-            float transit1 = leg1.EstimatedTransitTimeSec;
-            float walk2 = Distance3D(leg1Endpoints.ToPos, leg2Endpoints.FromPos) / WALK_SPEED;
-            float transit2 = leg2.EstimatedTransitTimeSec;
-            float walk3 = Distance3D(leg2Endpoints.ToPos, destPos) / WALK_SPEED;
-            float totalCost = walk1 + transit1 + walk2 + transit2 + walk3;
+            var route = new List<RouteLeg>();
+            AppendApproachWalkLegs(route, startMapId, startPos, leg1Endpoints);
+            route.Add(MakeTransitionLeg(leg1, leg1Endpoints));
+            AppendApproachWalkLegs(route, leg1.ToMapId, leg1Endpoints.ToPos, leg2Endpoints);
+            route.Add(MakeTransitionLeg(leg2, leg2Endpoints));
+
+            float walk3 = Distance3D(leg2Endpoints.ToPos, destPos);
+            if (walk3 > 5f)
+            {
+                route.Add(new RouteLeg(TransitionType.Walk, destMapId, leg2Endpoints.ToPos, destPos,
+                    null, null, null, null, null, walk3 / WALK_SPEED));
+            }
+
+            float totalCost = EstimateRouteTime(route);
 
             if (totalCost < bestCost)
             {
                 bestCost = totalCost;
-
-                // Build the route
-                var route = new List<RouteLeg>();
-
-                // Walk to first transition
-                if (walk1 > 5f / WALK_SPEED)
-                {
-                    route.Add(new RouteLeg(TransitionType.Walk, startMapId, startPos, leg1Endpoints.FromPos,
-                        null, null, null, null, null, walk1));
-                }
-
-                // First transition
-                route.Add(MakeTransitionLeg(leg1));
-
-                // Walk between transitions
-                if (walk2 > 5f / WALK_SPEED)
-                {
-                    route.Add(new RouteLeg(TransitionType.Walk, leg1.ToMapId, leg1Endpoints.ToPos, leg2Endpoints.FromPos,
-                        null, null, null, null, null, walk2));
-                }
-
-                // Second transition
-                route.Add(MakeTransitionLeg(leg2));
-
-                // Walk to destination
-                if (walk3 > 5f / WALK_SPEED)
-                {
-                    route.Add(new RouteLeg(TransitionType.Walk, destMapId, leg2Endpoints.ToPos, destPos,
-                        null, null, null, null, null, walk3));
-                }
-
                 bestRoute = route;
             }
         }
@@ -409,9 +374,8 @@ public class CrossMapRouter
         return bestRoute;
     }
 
-    private static RouteLeg MakeTransitionLeg(MapTransition t)
+    private static RouteLeg MakeTransitionLeg(MapTransition t, TransitionEndpoints endpoints)
     {
-        var endpoints = ResolveTransitionEndpoints(t);
         return new RouteLeg(t.Type, t.FromMapId, endpoints.FromPos, endpoints.ToPos,
             t.Transport, endpoints.BoardStop, endpoints.ExitStop, null, null, t.EstimatedTransitTimeSec);
     }
@@ -430,10 +394,83 @@ public class CrossMapRouter
         var boardStop = FindNearestStop(transition.Transport, transition.FromPos);
         var exitStop = GetDestinationStop(transition.Transport, transition.FromPos);
         return new TransitionEndpoints(
-            boardStop?.NavigationPosition ?? transition.FromPos,
+            boardStop?.NavigationEndpoint ?? transition.FromPos,
             exitStop?.WaitPosition ?? transition.ToPos,
             boardStop,
             exitStop);
+    }
+
+    private static void AppendApproachWalkLegs(
+        List<RouteLeg> legs,
+        uint mapId,
+        Position start,
+        TransitionEndpoints endpoints)
+    {
+        var current = start;
+        foreach (var point in SelectApproachRoute(start, endpoints))
+        {
+            var distance = Distance3D(current, point.Position);
+            if (distance > 5f)
+            {
+                legs.Add(new RouteLeg(
+                    TransitionType.Walk,
+                    mapId,
+                    current,
+                    point.Position,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    distance / WALK_SPEED,
+                    point.Name));
+            }
+
+            current = point.Position;
+        }
+    }
+
+    private static float EstimateApproachWalkDistance(Position start, TransitionEndpoints endpoints)
+    {
+        var current = start;
+        var total = 0f;
+        foreach (var point in SelectApproachRoute(start, endpoints))
+        {
+            total += Distance3D(current, point.Position);
+            current = point.Position;
+        }
+
+        return total;
+    }
+
+    private static IReadOnlyList<TransportApproachPoint> SelectApproachRoute(
+        Position start,
+        TransitionEndpoints endpoints)
+    {
+        var route = endpoints.BoardStop?.ApproachRoute;
+        if (route is not { Length: > 0 })
+        {
+            return
+            [
+                new TransportApproachPoint(
+                    endpoints.BoardStop?.Name ?? "transition.approach",
+                    endpoints.FromPos)
+            ];
+        }
+
+        var startIndex = 0;
+        var bestDistance = float.MaxValue;
+        for (var i = 0; i < route.Length; i++)
+        {
+            var distance = Distance3D(start, route[i].Position);
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            startIndex = i;
+        }
+
+        return route.Skip(startIndex).ToArray();
     }
 
     private readonly record struct TransitionEndpoints(

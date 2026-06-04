@@ -77,6 +77,35 @@ TravelPlan {
 
 ## BotRunner Execution (Path Persistence)
 
+### Current Long-Travel Sequencing Contract
+
+StateManager selects the high-level travel objective, for example "reach
+Undercity." It does not own the step-by-step tower, dock, elevator, zeppelin, or
+boat plan. BotRunner receives the travel objective and decomposes it through
+`CrossMapRouter` into ordered `RouteLeg` records.
+
+For long scheduled-transport routes, `TransportData` can now describe two
+additional stop surfaces:
+
+- `ApproachRoute`: ordered named world waypoints that turn an opaque
+  flight-master-to-transport walk into observable sub-objectives.
+- `WaitSurface`: the named navmesh polygon/surface where bots should wait for a
+  boat or zeppelin, with deterministic per-bot sampling so multiple bots do not
+  stack on one coordinate.
+
+The Horde Crossroads -> Undercity plan is therefore sequenced as:
+
+1. Walk to the Crossroads flight master.
+2. Take flight path `25 -> 23` to Orgrimmar.
+3. Walk named Orgrimmar approach stages: descend the windrider tower, exit the
+   front gate, cross the Durotar exterior approach, climb the zeppelin tower,
+   pass Frezza's deck, and stop at the Undercity zeppelin boarding platform.
+4. Wait on `OrgrimmarUndercityZeppelinBoardingPlatform`
+   (`polyRef=0x1000015201B41`, `polyIndex=6977`) until the zeppelin is docked
+   and stable.
+5. Board from the configured gangplank point, ride, disembark, then continue
+   with the next route leg toward the final destination.
+
 ### Two-Layer Path Model
 
 ```
