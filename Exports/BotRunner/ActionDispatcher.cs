@@ -1225,7 +1225,14 @@ namespace BotRunner
 
                     case CharacterAction.TravelTo:
                         {
-                            const float sameMapTravelArrivalTolerance = 15f;
+                            // Arrival must mean the bot actually REACHED the target (NPC
+                            // interaction range), not merely "in the area". The prior 15y
+                            // horizontal tolerance let TravelTo complete ~14y short of the
+                            // target and, against a target on a deck/upper layer, on the
+                            // ramp ~6y BELOW it (OG zeppelin Frezza: completed at z47.8,
+                            // 2D=13.9y/dz=5.8y from z53.6). 5y matches TravelTask's own
+                            // DefaultArrivalRadius and the deck-lip test's success zone. (2026-06-01)
+                            const float sameMapTravelArrivalTolerance = 5f;
                             const float sameMapTravelVerticalArrivalTolerance = 4f;
 
                             // Params: [0]=mapId, [1]=x (float), [2]=y (float), [3]=z (float)
@@ -1291,7 +1298,7 @@ namespace BotRunner
                                 if (sameMapTravelResult != TravelTaskUpsertResult.Duplicate)
                                 {
                                     Log.Information(
-                                        "[BOT RUNNER] TravelTo same-map upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1}) arrivalRadius=15.0",
+                                        "[BOT RUNNER] TravelTo same-map upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1}) arrivalRadius=5.0",
                                         sameMapTravelResult,
                                         targetMapId,
                                         targetX,

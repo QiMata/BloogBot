@@ -44,12 +44,6 @@ namespace WoWSharpClient.Movement
         public bool TeleportClampActive { get; init; }
         public bool UndergroundSnapFired { get; init; }
 
-        // Wall contact
-        public bool HitWall { get; init; }
-        public float WallNormalX { get; init; }
-        public float WallNormalY { get; init; }
-        public float BlockedFraction { get; init; }
-
         // Path state
         public float PathWaypointZ { get; init; }
         public int PathWaypointIndex { get; init; }

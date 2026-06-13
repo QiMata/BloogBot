@@ -190,9 +190,6 @@ namespace GameData.Core.Interfaces
         void StartMovement(ControlBits bits);
         void StopMovement(ControlBits bits);
         void Jump();
-        bool PhysicsHitWall => false;
-        (float X, float Y) PhysicsWallNormal2D => (0f, 0f);
-        float PhysicsBlockedFraction => 1.0f;
         string? PhysicsFrozenDebugInfo => null;
         SceneEnvironmentFlags PhysicsEnvironmentFlags => SceneEnvironmentFlags.None;
         bool PhysicsIsIndoors => PhysicsEnvironmentFlags.IsIndoors();

@@ -89,6 +89,7 @@ void printUsage()
     printf("--skipBattlegrounds : does not include PVP arenas\n");
     printf("--debug : create debugging files for use with RecastDemo\n");
     printf("--quick : Does not remove undermap positions ... But generates way more quickly.\n");
+    printf("--rebuild : force-rebuild EVERY tile even if a valid .mmtile already exists (full-map / all-maps bake; default skips up-to-date tiles).\n");
     printf("--silent : Make script friendly. No wait for user input, error, completion.\n");
     printf("--offMeshInput [file.*] : Path to file containing off mesh connections data.\n\n");
     printf("--configInputPath [file.*] : Path to json configuration file.\n\n");
@@ -117,7 +118,8 @@ bool handleArgs(int argc, char** argv,
                 int& threads,
                 float& debugWoWX,
                 float& debugWoWY,
-                bool& debugWoWSet)
+                bool& debugWoWSet,
+                bool& rebuild)
 {
     char* param = nullptr;
     for (int i = 1; i < argc; ++i)
@@ -179,6 +181,10 @@ bool handleArgs(int argc, char** argv,
         else if (strcmp(argv[i], "--quick") == 0)
         {
             quick = true;
+        }
+        else if (strcmp(argv[i], "--rebuild") == 0)
+        {
+            rebuild = true;
         }
         else if (strcmp(argv[i], "--onlyGO") == 0)
         {
@@ -269,11 +275,12 @@ int main(int argc, char** argv)
     float debugWoWX = 0.0f;
     float debugWoWY = 0.0f;
     bool debugWoWSet = false;
+    bool rebuild = false;
 
     char const* offMeshInputPath = "offmesh.txt";
     char const* configInputPath = "config.json";
 
-    bool validParam = handleArgs(argc, argv, mapId, tileX, tileY, skipLiquid, skipContinents, skipJunkMaps, skipBattlegrounds, debug, silent, quick, buildOnlyGameobjectModels, offMeshInputPath, configInputPath, threads, debugWoWX, debugWoWY, debugWoWSet);
+    bool validParam = handleArgs(argc, argv, mapId, tileX, tileY, skipLiquid, skipContinents, skipJunkMaps, skipBattlegrounds, debug, silent, quick, buildOnlyGameobjectModels, offMeshInputPath, configInputPath, threads, debugWoWX, debugWoWY, debugWoWSet, rebuild);
 
     if (!validParam)
         return silent ? EXIT_FAILURE : finish("You have specified invalid parameters (use -? for more help)", EXIT_FAILURE);
@@ -321,6 +328,7 @@ int main(int argc, char** argv)
     }
 
     MapBuilder builder(configInputPath, skipLiquid, skipContinents, skipJunkMaps, skipBattlegrounds, debug, quick, offMeshInputPath, uint8(threads), debugWoWX, debugWoWY, debugWoWSet);
+    builder.SetRebuildAll(rebuild);
 
     if (buildOnlyGameobjectModels)
         builder.buildTransports();

@@ -137,6 +137,56 @@ public class TransportWaitingLogicTests
     }
 
     [Fact]
+    public void ResolveWaitPosition_WithStableKey_SamplesInsideConfiguredWaitSurface()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var surface = boardingStop.WaitSurface!;
+
+        var defaultTarget = boardingStop.ResolveWaitPosition();
+        var first = boardingStop.ResolveWaitPosition("bot:a");
+        var firstAgain = boardingStop.ResolveWaitPosition("bot:a");
+        var second = boardingStop.ResolveWaitPosition("bot:b");
+
+        AssertNear(boardingStop.NavigationPosition, defaultTarget, 0.001f);
+        AssertNear(first, firstAgain, 0.001f);
+        Assert.True(
+            DistanceXY(first, surface.Center) <= surface.SampleRadius,
+            $"Expected first wait sample to stay within {surface.SampleRadius:F1}y of {surface.Name}.");
+        Assert.True(
+            DistanceXY(second, surface.Center) <= surface.SampleRadius,
+            $"Expected second wait sample to stay within {surface.SampleRadius:F1}y of {surface.Name}.");
+        Assert.True(
+            DistanceXY(first, second) > 0.1f,
+            $"Expected stable keys to spread across {surface.Name}; first={Format(first)} second={Format(second)}.");
+        Assert.Equal(surface.Center.Z, first.Z, 3);
+        Assert.Equal(surface.Center.Z, second.Z, 3);
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinWithStableWaitKey_HoldsSurfacePointUntilReadyToBoard()
+    {
+        const string waitKey = "bot:surface-wait";
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var expectedWaitPosition = boardingStop.ResolveWaitPosition(waitKey);
+        var logic = new TransportWaitingLogic(
+            ZeppelinUndercityOrgrimmar,
+            boardingStop,
+            destinationStop,
+            stableWaitKey: waitKey);
+
+        var approachTarget = logic.Update(boardingStop.NavigationPosition, 0, null, DT);
+        var waitTarget = logic.Update(boardingStop.NavigationPosition, 0, null, 5f);
+        var boardingTarget = AdvanceStableZeppelinAtDock(logic, expectedWaitPosition);
+
+        Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
+        AssertNear(expectedWaitPosition, approachTarget!, 0.001f);
+        AssertNear(expectedWaitPosition, waitTarget!, 0.001f);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        AssertNear(boardingStop.BoardingPosition!, boardingTarget!, 0.001f);
+    }
+
+    [Fact]
     public void Approaching_ZeppelinAtConfiguredBoardingPosition_TransitionsToWaitingOnTheDeck()
     {
         // The live OG walk leg now hands off at the front boarding zone. A bot
@@ -1029,6 +1079,17 @@ public class TransportWaitingLogicTests
         var dy = a.Y - b.Y;
         return MathF.Sqrt(dx * dx + dy * dy);
     }
+
+    private static void AssertNear(Position expected, Position actual, float tolerance)
+    {
+        Assert.True(
+            DistanceXY(expected, actual) <= tolerance
+            && MathF.Abs(expected.Z - actual.Z) <= tolerance,
+            $"Expected {Format(actual)} to be within {tolerance:F3}y of {Format(expected)}.");
+    }
+
+    private static string Format(Position position)
+        => $"({position.X:F3},{position.Y:F3},{position.Z:F3})";
 
     private static List<DynamicObjectProto> MakeElevatorAtZ(float z)
     {

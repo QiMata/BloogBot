@@ -22,7 +22,40 @@ public class TravelTask : BotTask, IBotTask
 {
     private const int MaxReplans = 3;
     private const float DefaultArrivalRadius = 5.0f;
+    // 2D radius for transport-handoff detection (WalkLegHandsOffToTransport),
+    // flight-master approach (ExecuteFlightPathLeg), and transport/elevator EXIT
+    // arrival (HasReachedTransportExit). Kept at the legacy 15y -- those flows
+    // legitimately register "close enough" well before the exact point, and
+    // tightening this broke nothing there. NOTE: plain walk-leg COMPLETION does NOT
+    // use this -- it uses the tighter WalkLegFinalArrivalRadius below.
     private const float WalkLegArrivalRadius = 15.0f;
+    // 2D radius at which a plain (non-transport) walk leg COMPLETES and hands the
+    // remainder to the Standard-policy close-range approach. Was 15y, but that handed
+    // off ~13y short of Frezza while the bot was still on the spiral/deck-edge -- the
+    // close-range approach then drove straight at Frezza's XY across the deck edge and
+    // fell off. 5y (== DefaultArrivalRadius) keeps the navmesh-following leg driving
+    // all the way onto the deck to near Frezza before handing off, leaving only a
+    // short on-tier step. Scoped to plain-leg completion (GetWalkLegArrivalRadius)
+    // so transport/flight handoff + exit detection (WalkLegArrivalRadius) are
+    // unchanged. Pairs with the 2y vertical-tier guard below. (2026-06-04: OG
+    // zeppelin deck-lip arrival.)
+    private const float WalkLegFinalArrivalRadius = 5.0f;
+    // A plain (non-transport) walk leg only "arrives" when the bot is within the
+    // 2D radius AND on roughly the same vertical layer as leg.End. Without this,
+    // a destination directly above the bot (deck / tower / upper floor) within
+    // WalkLegArrivalRadius horizontally falsely completes the leg at the base —
+    // e.g. OG zeppelin tower: Frezza (z=53.6) is ~14.5y due-south of the Grunt
+    // base (z=24), so the base is 2D<=15y from Frezza yet ~30y below it. The leg
+    // would complete at the base and dump the bot into the Standard-policy
+    // route-exhausted fallback, which cannot drive the long climb. Was 6y, but that
+    // still accepted "arrival" ~5.6y BELOW the OG zeppelin deck while the bot was on
+    // the lip/spiral (Frezza z=53.6, lip z~48): the leg completed there and handed
+    // off to the Standard-policy approach, which then drove straight at Frezza's XY
+    // (west) into the deck overhang dead-end instead of letting the navmesh-following
+    // leg climb the spiral. Tightened to 2y (cf. the 1.5y same-deck-tier boarding
+    // tolerance below) so a plain walk leg only "arrives" on the destination's tier
+    // and otherwise keeps following the path all the way up. (2026-06-01; 2026-06-04)
+    private const float WalkLegVerticalArrivalTolerance = 2.0f;
     private const float WalkLegTransportArrivalRadius = 4.0f;
     private const float WalkLegTransportVerticalArrivalTolerance = 6.0f;
     // Phase 5.3.6 (PFS-OVERHAUL-006): under WWOW_OFFMESH_NATIVE_BOARDING, the
@@ -149,7 +182,14 @@ public class TravelTask : BotTask, IBotTask
         if (player.MapId == _targetMapId)
         {
             var dist = player.Position.DistanceTo(_targetPosition);
-            if (dist <= _arrivalRadius)
+            var horizontalDist = player.Position.DistanceTo2D(_targetPosition);
+            var verticalDelta = Math.Abs(player.Position.Z - _targetPosition.Z);
+            // Arrival requires HORIZONTAL proximity AND being on roughly the same
+            // vertical layer. A 3D-radius-only check falsely "arrives" below a target
+            // that is directly ABOVE the bot — OG zeppelin: at z41 the bot is ~8y
+            // horizontal but ~12.5y below Frezza (z53.6), i.e. ~15y 3D <= _arrivalRadius,
+            // so the task popped travel_complete 12.5y under the deck and went Idle.
+            if (horizontalDist <= _arrivalRadius && verticalDelta <= WalkLegVerticalArrivalTolerance)
             {
                 Logger.LogInformation(
                     "[TravelTask] Arrived at destination ({X:F0},{Y:F0},{Z:F0}) distance {Dist:F1}y",
@@ -425,7 +465,7 @@ public class TravelTask : BotTask, IBotTask
     private bool CanCompleteWalkLeg(RouteLeg leg, float verticalDelta)
     {
         if (!WalkLegHandsOffToTransport(leg))
-            return true;
+            return verticalDelta <= WalkLegVerticalArrivalTolerance;
 
         var tolerance = TransportWaitingLogic.IsNativeOffMeshBoardingEnabled()
             ? WalkLegNativeOffMeshTransportVerticalArrivalTolerance
@@ -475,7 +515,7 @@ public class TravelTask : BotTask, IBotTask
     private float GetWalkLegArrivalRadius(RouteLeg leg)
     {
         if (!WalkLegHandsOffToTransport(leg))
-            return WalkLegArrivalRadius;
+            return WalkLegFinalArrivalRadius;
 
         // Phase 5.3.5+: when native off-mesh boarding is active, the walk leg
         // is judged against the configured boarding zone rather than a narrow
@@ -535,7 +575,11 @@ public class TravelTask : BotTask, IBotTask
             return;
         }
 
-        _transportLogic ??= new TransportWaitingLogic(leg.Transport, leg.BoardStop, leg.ExitStop);
+        _transportLogic ??= new TransportWaitingLogic(
+            leg.Transport,
+            leg.BoardStop,
+            leg.ExitStop,
+            GetStableTransportWaitKey(player));
         var nearbyObjects = PathfindingOverlayBuilder.BuildNearbyObjects(
             ObjectManager,
             player.Position,
@@ -659,8 +703,11 @@ public class TravelTask : BotTask, IBotTask
         ResetTransportTraceMarkers();
         ResetTransportBoardingProgressMarkers();
 
+        var stage = string.IsNullOrWhiteSpace(leg.StageName)
+            ? string.Empty
+            : $" stage={leg.StageName}";
         EmitTravelDiagnostic(
-            $"[TRAVEL_LEG] start index={index} type={leg.Type} map={leg.MapId} end=({leg.End.X:F1},{leg.End.Y:F1},{leg.End.Z:F1})");
+            $"[TRAVEL_LEG] start index={index} type={leg.Type}{stage} map={leg.MapId} end=({leg.End.X:F1},{leg.End.Y:F1},{leg.End.Z:F1})");
     }
 
     private void CompleteCurrentLeg(string reason)
@@ -975,7 +1022,6 @@ public class TravelTask : BotTask, IBotTask
         _lastWalkTraceResolution = resolution;
         _lastWalkTraceEmitUtc = now;
 
-        var wallNormal = ObjectManager.PhysicsWallNormal2D;
         var decision = trace.RouteDecision;
         EmitTravelDiagnostic(
             $"[TRAVEL_WALK_NAV] leg={_currentLegIndex} nav={navigated} stuck={stuckGeneration} " +
@@ -983,8 +1029,6 @@ public class TravelTask : BotTask, IBotTask
             $"resolution={resolution} idx={trace.CurrentWaypointIndex} afford={decision.MaxAffordance} " +
             $"agent={trace.Race}/{trace.Gender} capsule=({trace.CapsuleRadius:F3},{trace.CapsuleHeight:F3}) " +
             $"alt={decision.AlternateSelected}/{decision.AlternateEvaluated} overlay={trace.UsedNearbyObjectOverlay}:{trace.NearbyObjectCount} " +
-            $"hitWall={ObjectManager.PhysicsHitWall} blocked={ObjectManager.PhysicsBlockedFraction:F2} " +
-            $"wall=({wallNormal.X:F2},{wallNormal.Y:F2}) " +
             $"player={FormatCompactPosition(player.Position)} target={FormatCompactPosition(leg.End)} " +
             $"active={FormatCompactPosition(trace.ActiveWaypoint)} " +
             $"window={FormatCompactPathWindow(trace.PlannedWaypoints, trace.CurrentWaypointIndex, 3, 7)} " +
@@ -1128,6 +1172,16 @@ public class TravelTask : BotTask, IBotTask
     private static bool IsOnTransport(IWoWLocalPlayer player)
         => player.TransportGuid != 0
             || (player.MovementFlags & MovementFlags.MOVEFLAG_ONTRANSPORT) != 0;
+
+    private static string? GetStableTransportWaitKey(IWoWLocalPlayer player)
+    {
+        if (player.Guid != 0)
+            return $"guid:{player.Guid:X16}";
+
+        return string.IsNullOrWhiteSpace(player.Name)
+            ? null
+            : $"name:{player.Name}";
+    }
 
     private static bool IsCrossMapTransportLeg(RouteLeg leg)
         => leg.Transport != null
@@ -1276,7 +1330,9 @@ public class TravelTask : BotTask, IBotTask
         => string.Join(" -> ", route.Select(DescribeLeg));
 
     private static string DescribeLeg(RouteLeg leg)
-        => leg.Type switch
+        => !string.IsNullOrWhiteSpace(leg.StageName)
+            ? $"{leg.Type}({leg.StageName})"
+            : leg.Type switch
         {
             TransitionType.FlightPath => $"FlightPath({leg.FlightStartNodeId}->{leg.FlightEndNodeId})",
             TransitionType.Zeppelin or TransitionType.Boat or TransitionType.Elevator =>

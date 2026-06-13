@@ -179,27 +179,29 @@ Detour vertices from these tiles are in `(WoW Y, WoW Z, WoW X)` order. Tools
 must convert them back before overlaying path coordinates recorded as normal
 WoW `(X, Y, Z)`.
 
-## Temporary fallback for live tests (PFS-OVERHAUL-006 Cycle 14, 2026-05-07)
+## Temporary fallback for live tests — RESCINDED 2026-06-13 (server mmap rescue)
 
-The structural separation works, but the first path request against
-`D:/wwow-bot/test-data` is ~30 seconds slower than against
-`D:/MaNGOS/data` despite bit-identical mmtile content (verified via
-`fc /b` and `Get-FileHash`). The climb sub-test's 20-second
-`SnapshotStallGuard` fires before the path arrives, so the bot can't
-move. Likely causes (uninvestigated yet): NTFS junction reparse
-overhead on the `vmaps/` and `maps/` symlinks, cold OS file cache on
-the test-data dir, or `WWOW_NAVIGATION_PRELOAD_MAPS=all` blocking the
-first request behind a cold preload.
+> **Do NOT set `WWOW_DATA_DIR=D:/MaNGOS/data` for bot/live tests.** The old
+> fallback below is rescinded and the instruction is now actively unsafe.
 
-Until that is rooted-out, **set `WWOW_DATA_DIR=D:/MaNGOS/data` on
-live BotRunner.Tests runs** (and `WWOW_TEST_DATA_DIR` to match). The
-canonical Phase 5.3.6 stall reproduces (`flags=0x1=WALK`, ~470 waypoints
-walked, ending at `(1338.1,-4646.0,51.6)`). Pathfinding unit/smoke tests
-in `Tests/PathfindingService.Tests` are unaffected and can keep using
-the test-data dir.
+The original Cycle-14 (2026-05-07) fallback told operators to point live
+`BotRunner.Tests` at `D:/MaNGOS/data` because the first path request against
+`D:/wwow-bot/test-data` was ~30s slower despite *bit-identical* mmtile content.
+That premise no longer holds: on 2026-06-13 the server root was rescued by
+restoring the known-good **server** mmap set (`mmaps_backup_20260315`), which
+is generated with server capsule parameters and is **not** bit-identical to the
+bot's `D:/wwow-bot/test-data` set. Pointing bot pathfinding at `D:/MaNGOS/data`
+now means the bot paths against the wrong (server-owned) nav data and
+re-couples bot iteration to the server root — exactly the contamination the
+isolation in this doc exists to prevent.
 
-When the latency is fixed, delete this section and switch the climb
-runs back to `D:/wwow-bot/test-data`.
+**Correct guidance:** bot pathfinding and live `BotRunner.Tests` MUST read from
+`D:/wwow-bot/test-data` (the `WWOW_TEST_DATA_DIR` / `WWOW_VALIDATION_DATA_DIR`
+default). Leave `WWOW_DATA_DIR` unset, or pin it to the bot test root — never to
+`D:/MaNGOS/data`. Route probes must pass `-DataDir D:\wwow-bot\test-data`
+explicitly. If the original cold first-request latency stall recurs, fix it via
+preload / OS-cache warming on the test-data root (or by investigating the NTFS
+junction reparse overhead), **not** by repointing tests at the server data dir.
 
 ## Strict `WWOW_DATA_DIR` gate (PFS-OVERHAUL-006 Cycle 14, 2026-05-07)
 

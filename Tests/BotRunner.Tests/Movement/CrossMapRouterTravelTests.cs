@@ -3,6 +3,7 @@ using BotRunner.Movement;
 using GameData.Core.Models;
 using Xunit;
 using Xunit.Abstractions;
+using System;
 using System.Linq;
 
 namespace BotRunner.Tests.Movement;
@@ -25,6 +26,7 @@ public class CrossMapRouterTravelTests
         {
             var leg = legs[i];
             _output.WriteLine($"  Leg {i}: {leg.Type} map={leg.MapId} " +
+                $"stage={leg.StageName ?? "(none)"} " +
                 $"start=({leg.Start.X:F0},{leg.Start.Y:F0}) end=({leg.End.X:F0},{leg.End.Y:F0}) " +
                 $"est={leg.EstimatedTimeSec:F0}s");
         }
@@ -60,6 +62,79 @@ public class CrossMapRouterTravelTests
             l.Type == TransitionType.Zeppelin ||
             l.Type == TransitionType.Boat);
         Assert.True(hasTransport, "Cross-continent route should include a transport leg");
+    }
+
+    [Fact]
+    public void CrossContinent_OrgToUndercity_ExpandsOrgrimmarZeppelinApproachSequence()
+    {
+        var legs = _router.PlanRoute(
+            1, new Position(1676, -4315, 61),
+            0, new Position(1586, 239, -52),
+            FlightPathData.Faction.Horde);
+
+        LogRoute(legs, "Orgrimmar sequenced approach -> Undercity");
+        var zeppelinIndex = legs.FindIndex(l => l.Type == TransitionType.Zeppelin);
+        Assert.True(zeppelinIndex > 0, $"Expected a zeppelin after approach walk legs:{Environment.NewLine}{Describe(legs)}");
+
+        var stageNames = legs
+            .Take(zeppelinIndex)
+            .Where(l => l.Type == TransitionType.Walk)
+            .Select(l => l.StageName)
+            .Where(stage => stage != null)
+            .ToArray();
+
+        AssertOrderedStages(
+            stageNames!,
+            "orgrimmar.windrider_tower.descent",
+            "orgrimmar.front_gate.hallway_exit",
+            "durotar.exterior_incline",
+            "orgrimmar.zeppelin_tower.lower_approach",
+            "orgrimmar.zeppelin_tower.base",
+            "orgrimmar.zeppelin_tower.frezza_deck",
+            "orgrimmar.undercity_zeppelin.boarding_platform");
+
+        var transportLeg = legs[zeppelinIndex];
+        Assert.Equal(TransportData.ZeppelinUndercityOrgrimmar, transportLeg.Transport);
+        Assert.Equal(TransportData.ZeppelinUndercityOrgrimmar.Stops[0], transportLeg.BoardStop);
+        AssertNear(transportLeg.Start, TransportData.ZeppelinUndercityOrgrimmar.Stops[0].NavigationEndpoint, 0.01f);
+    }
+
+    [Fact]
+    public void CrossContinent_CrossroadsToUndercity_SequencesApproachAfterFlight()
+    {
+        var legs = _router.PlanRoute(
+            1, new Position(-437.137f, -2596.0f, 95.8708f),
+            0, new Position(1586, 239, -52),
+            FlightPathData.Faction.Horde,
+            discoveredFlightNodes: [25u, 23u]);
+
+        LogRoute(legs, "Crossroads -> flight -> sequenced Orgrimmar approach -> Undercity");
+        var flightIndex = legs.FindIndex(l => l.Type == TransitionType.FlightPath);
+        var zeppelinIndex = legs.FindIndex(l => l.Type == TransitionType.Zeppelin);
+        Assert.True(flightIndex >= 0, $"Expected flight leg:{Environment.NewLine}{Describe(legs)}");
+        Assert.True(zeppelinIndex > flightIndex, $"Expected zeppelin after flight:{Environment.NewLine}{Describe(legs)}");
+        Assert.Equal(25u, legs[flightIndex].FlightStartNodeId);
+        Assert.Equal(23u, legs[flightIndex].FlightEndNodeId);
+
+        var firstPostFlightWalk = legs
+            .Skip(flightIndex + 1)
+            .FirstOrDefault(l => l.Type == TransitionType.Walk);
+        Assert.NotNull(firstPostFlightWalk);
+        Assert.Equal("orgrimmar.windrider_tower.descent", firstPostFlightWalk!.StageName);
+
+        Assert.Equal("orgrimmar.undercity_zeppelin.boarding_platform", legs[zeppelinIndex - 1].StageName);
+    }
+
+    [Fact]
+    public void TransportData_OrgrimmarUndercityBoardingStop_ExposesWaitSurfacePolygon()
+    {
+        var stop = TransportData.ZeppelinUndercityOrgrimmar.Stops[0];
+
+        Assert.NotNull(stop.WaitSurface);
+        Assert.Equal("OrgrimmarUndercityZeppelinBoardingPlatform", stop.WaitSurface!.Name);
+        Assert.Equal(0x1000015201B41UL, stop.WaitSurface.PolygonRef);
+        Assert.Equal(6977, stop.WaitSurface.PolygonIndex);
+        AssertNear(stop.WaitSurface.Center, stop.BoardingPosition!, 0.01f);
     }
 
     [Fact]
@@ -106,4 +181,30 @@ public class CrossMapRouterTravelTests
         var hasPortal = legs.Any(l => l.Type == TransitionType.DungeonPortal);
         Assert.True(hasPortal, "Route to dungeon instance should include a portal leg");
     }
+
+    private static void AssertOrderedStages(string?[] actual, params string[] expected)
+    {
+        var searchStart = 0;
+        foreach (var stage in expected)
+        {
+            var found = Array.FindIndex(actual, searchStart, candidate => candidate == stage);
+            Assert.True(found >= 0, $"Expected stage '{stage}' after index {searchStart}; actual=[{string.Join(", ", actual)}]");
+            searchStart = found + 1;
+        }
+    }
+
+    private static void AssertNear(Position actual, Position expected, float tolerance)
+    {
+        Assert.True(
+            Math.Abs(actual.X - expected.X) <= tolerance
+            && Math.Abs(actual.Y - expected.Y) <= tolerance
+            && Math.Abs(actual.Z - expected.Z) <= tolerance,
+            $"Expected ({expected.X:F3},{expected.Y:F3},{expected.Z:F3}) but got ({actual.X:F3},{actual.Y:F3},{actual.Z:F3}).");
+    }
+
+    private static string Describe(System.Collections.Generic.IReadOnlyList<RouteLeg> legs)
+        => string.Join(Environment.NewLine, legs.Select((leg, index) =>
+            $"{index}: {leg.Type} stage={leg.StageName ?? "(none)"} " +
+            $"start=({leg.Start.X:F1},{leg.Start.Y:F1},{leg.Start.Z:F1}) " +
+            $"end=({leg.End.X:F1},{leg.End.Y:F1},{leg.End.Z:F1})"));
 }

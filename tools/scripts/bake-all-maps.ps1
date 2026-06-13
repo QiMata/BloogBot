@@ -75,7 +75,10 @@ foreach ($mapId in $Maps) {
 
     Push-Location $DataDir
     try {
-        $args = @($mapId, '--threads', $Threads, '--silent', '--configInputPath', $ConfigPath)
+        # --rebuild: this script's whole purpose is to REGENERATE every tile, so it
+        # must override MmapGen's incremental shouldSkipTile() skip (which otherwise
+        # silently no-ops a full rebake when valid .mmtile already exist on disk).
+        $args = @($mapId, '--rebuild', '--threads', $Threads, '--silent', '--configInputPath', $ConfigPath)
         if ($OffmeshPath -and (Test-Path $OffmeshPath)) {
             $args += @('--offMeshInput', $OffmeshPath)
         }

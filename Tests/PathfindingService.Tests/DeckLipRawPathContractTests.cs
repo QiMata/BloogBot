@@ -51,6 +51,70 @@ public class DeckLipRawPathContractTests(NavigationFixture fixture)
     }
 
     [Fact]
+    public void CalculateRawPath_DeckLipGruntBaseToLiteralFrezza_SmoothRouteDoesNotOscillate()
+    {
+        // Regression guard for the OG-zeppelin deck-lip findSmoothPath limit cycle
+        // (fix/decklip-arrival-false-green). The tower is a vertical spiral, so the native
+        // smoothing walk used to fall into a period-2 A<->B limit cycle at the deck-lip
+        // (z46<->z47): moveAlongSurface's fixed 2.0y step bounced iterPos between two
+        // mutually-reachable corridor anchors while fixupCorridor rewound the corridor, and
+        // the per-iteration store emitted an oscillating, non-monotonic waypoint sequence --
+        // 16 DOWN segments / 5.66y of backward climb -- that steered the live bot backward
+        // and stalled it. RAW findStraightPath over the IDENTICAL Detour corridor is
+        // monotonic (DOWN=1 / 0.57y), proving the corridor is sound and the defect is in the
+        // smoothing densification alone. The native retroactive-cycle-suppression fix
+        // (PathFinder::findSmoothPath) collapses the oscillation to ~4 DOWN / ~1.05y, the
+        // residual being legitimate sub-0.3y base micro-terrain plus the final descent onto
+        // Frezza's deck. This guards the SMOOTH route against the oscillation silently
+        // returning (e.g. a bake change re-fragmenting the deck-lip polys, or the suppression
+        // being weakened). Route-validity rule: a path can be Walk/StepUp on every segment yet
+        // be un-followable if the SEQUENCE oscillates -- assert net monotonicity, not just
+        // per-segment affordance.
+        var result = _navigation.CalculateRawPath(
+            Kalimdor,
+            DeckLipGruntBaseStart,
+            OrgrimmarZeppelinMasterFrezzaSpawn,
+            smoothPath: true,
+            agentRadius: TaurenMaleRadius,
+            agentHeight: TaurenMaleHeight);
+
+        Assert.Equal("raw_detour", result.Result);
+        Assert.Null(result.BlockedSegmentIndex);
+
+        var downSegments = 0;
+        var backwardZ = 0f;
+        for (var i = 1; i < result.Path.Length; i++)
+        {
+            var dz = result.Path[i].Z - result.Path[i - 1].Z;
+            if (dz < -0.05f)
+            {
+                downSegments++;
+                backwardZ += -dz;
+            }
+        }
+
+        Console.WriteLine(
+            $"Smooth Frezza route: len={result.Path.Length} downSegments={downSegments} backwardZ={backwardZ:F2}y " +
+            $"final=({result.Path[^1].X:F2},{result.Path[^1].Y:F2},{result.Path[^1].Z:F2})");
+
+        // Pre-fix oscillation was 16 DOWN / 5.66y; the fix yields ~4 DOWN / ~1.05y. Bound well
+        // below the oscillation so a regression of the cycle suppression fails here, while
+        // leaving headroom for legitimate micro-terrain.
+        Assert.True(
+            downSegments <= 8,
+            $"SMOOTH deck-lip route regressed to an oscillating sequence: {downSegments} DOWN segments " +
+            $"(pre-fix bug = 16, post-fix = ~4). The findSmoothPath cycle suppression may have regressed." +
+            $"{Environment.NewLine}{FormatPath(result.Path)}");
+        Assert.True(
+            backwardZ <= 3.0f,
+            $"SMOOTH deck-lip route has {backwardZ:F2}y of backward climb (pre-fix bug = 5.66y, post-fix = ~1.05y); " +
+            $"expected near-monotonic (<= 3y).");
+        Assert.True(
+            result.Path[^1].Z >= 50.0f,
+            $"Expected the smooth route to finish on the upper deck near Frezza; final Z was {result.Path[^1].Z:F2}.");
+    }
+
+    [Fact]
     public void CalculateRawPath_DeckLipGruntBaseToBoardingCorridor_ReachesUpperTowerLayer()
     {
         var result = _navigation.CalculateRawPath(

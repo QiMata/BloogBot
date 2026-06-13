@@ -36,9 +36,6 @@ public class TravelTaskTests
 
         var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
         objectManager.SetupGet(o => o.Player).Returns(player.Object);
-        objectManager.SetupGet(o => o.PhysicsHitWall).Returns(false);
-        objectManager.SetupGet(o => o.PhysicsBlockedFraction).Returns(1f);
-        objectManager.SetupGet(o => o.PhysicsWallNormal2D).Returns((0f, 0f));
 
         var context = new Mock<IBotContext>(MockBehavior.Loose);
         context.SetupGet(c => c.ObjectManager).Returns(objectManager.Object);
@@ -87,8 +84,6 @@ public class TravelTaskTests
         Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] player-ready map=1 pos=(1332.8,-4633.4,24.0)", StringComparison.Ordinal));
         Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] navpath-create enter", StringComparison.Ordinal));
         Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] navpath-create exit policy=LongTravel created=True", StringComparison.Ordinal));
-        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] physics-read enter", StringComparison.Ordinal));
-        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] physics-read exit hitWall=False blocked=1.00 normal=(0.00,0.00)", StringComparison.Ordinal));
         Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] waypoint-query enter map=1", StringComparison.Ordinal));
         Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] walk-nav exit leg=0 nav=True", StringComparison.Ordinal));
         Assert.Contains(diagnostics, message => message.Contains("[TRAVEL_PLAN]", StringComparison.Ordinal));
@@ -127,9 +122,6 @@ public class TravelTaskTests
 
         var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
         objectManager.SetupGet(o => o.Player).Returns(player.Object);
-        objectManager.SetupGet(o => o.PhysicsHitWall).Returns(false);
-        objectManager.SetupGet(o => o.PhysicsBlockedFraction).Returns(1f);
-        objectManager.SetupGet(o => o.PhysicsWallNormal2D).Returns((0f, 0f));
 
         var context = new Mock<IBotContext>(MockBehavior.Loose);
         context.SetupGet(c => c.ObjectManager).Returns(objectManager.Object);
@@ -177,6 +169,86 @@ public class TravelTaskTests
         Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] walk-nav exit leg=0 nav=True", StringComparison.Ordinal));
         Assert.Contains(diagnostics, message => message.Contains("[TRAVEL_PLAN]", StringComparison.Ordinal));
         Assert.Contains(diagnostics, message => message.Contains("[TRAVEL_LEG] start index=0 type=Walk", StringComparison.Ordinal));
+        objectManager.Verify(o => o.MoveToward(It.IsAny<Position>(), It.IsAny<float>()), Times.Once);
+    }
+
+    [Fact]
+    public void Update_TargetDirectlyAboveWithinHorizontalRadius_DoesNotCompleteWalkLegAtBase()
+    {
+        // Regression guard (2026-06-01): a plain (non-transport) walk leg whose
+        // End is directly ABOVE the bot — within WalkLegArrivalRadius (15y)
+        // horizontally but far below vertically — must NOT complete at the base.
+        // OG zeppelin tower: literal Frezza (z=53.6) is ~14.8y 2D from this base
+        // spot (z=24) yet ~30y above it. Before the WalkLegVerticalArrivalTolerance
+        // gate, TryGetWalkLegArrival returned true here (2D<=15 && CanComplete=true),
+        // falsely completing the leg at the base and dumping the bot into the
+        // Standard-policy route-exhausted fallback that cannot drive the climb.
+        var taskStack = new Stack<IBotTask>();
+        var diagnostics = new List<string>();
+        var immediateDiagnostics = new List<string>();
+
+        // 2D distance to Frezza = ~14.8y (<= 15y radius); vertical delta = ~29.6y.
+        var playerPosition = new Position(1328.1f, -4635.0f, 24.0f);
+        var literalFrezzaTarget = new Position(1331.1f, -4649.5f, 53.6f);
+        const uint mapId = 1u;
+        const ulong transportGuid = 0UL;
+        var movementFlags = MovementFlags.MOVEFLAG_NONE;
+
+        var player = new Mock<IWoWLocalPlayer>(MockBehavior.Loose);
+        player.SetupGet(p => p.MapId).Returns(mapId);
+        player.SetupGet(p => p.Position).Returns(() => playerPosition);
+        player.SetupGet(p => p.MovementFlags).Returns(() => movementFlags);
+        player.SetupGet(p => p.TransportGuid).Returns(() => transportGuid);
+        player.Setup(p => p.GetFacingForPosition(It.IsAny<Position>())).Returns(0f);
+
+        var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
+        objectManager.SetupGet(o => o.Player).Returns(player.Object);
+
+        var context = new Mock<IBotContext>(MockBehavior.Loose);
+        context.SetupGet(c => c.ObjectManager).Returns(objectManager.Object);
+        context.SetupGet(c => c.BotTasks).Returns(taskStack);
+        context.SetupGet(c => c.Config).Returns(new BotBehaviorConfig());
+        context.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(diagnostics.Add);
+        context.Setup(c => c.AddImmediateDiagnostic(It.IsAny<string>()))
+            .Callback<string>(immediateDiagnostics.Add);
+
+        var pathfinding = new Mock<PathfindingClient>(MockBehavior.Loose);
+        pathfinding
+            .Setup(p => p.GetPathResult(
+                It.IsAny<uint>(),
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>?>(),
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()))
+            .Returns((uint _, Position start, Position end, IReadOnlyList<DynamicObjectProto>? _, bool _, Race _, Gender _) =>
+                CreateSupportedPathResult(start, end));
+        var container = new Mock<IDependencyContainer>(MockBehavior.Loose);
+        container.SetupGet(c => c.PathfindingClient).Returns(pathfinding.Object);
+        context.SetupGet(c => c.Container).Returns(container.Object);
+
+        var task = new TravelTask(
+            context.Object,
+            mapId,
+            literalFrezzaTarget,
+            new TravelOptions
+            {
+                PlayerFaction = TravelFaction.Horde,
+                DiscoveredFlightNodes = [25u, 23u]
+            },
+            arrivalRadius: 15f);
+        taskStack.Push(task);
+
+        task.Update();
+
+        // Must NOT falsely arrive/complete at the base.
+        Assert.DoesNotContain(diagnostics, message => message.Contains("reason=walk_arrived", StringComparison.Ordinal));
+        Assert.DoesNotContain(diagnostics, message => message.Contains("[TRAVEL_COMPLETE]", StringComparison.Ordinal));
+        // The task stays active and keeps navigating upward toward the climb.
+        Assert.Same(task, taskStack.Peek());
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] walk-nav enter leg=0", StringComparison.Ordinal));
         objectManager.Verify(o => o.MoveToward(It.IsAny<Position>(), It.IsAny<float>()), Times.Once);
     }
 
@@ -278,10 +350,7 @@ public class TravelTaskTests
 
         var crossroads = new Position(-437.0f, -2596.0f, 96.0f);
         var orgrimmarFlightMaster = new Position(1677.0f, -4315.0f, 62.0f);
-        // The live Orgrimmar zeppelin handoff should complete at the front
-        // boarding zone so the walk leg and boarding logic share the same
-        // gangplank-side target.
-        var liveApproachPosition = TransportData.ZeppelinUndercityOrgrimmar.Stops[0].NavigationPosition;
+        var approachRoute = TransportData.ZeppelinUndercityOrgrimmar.Stops[0].ApproachRoute!;
         var undercityTarget = new Position(1584.0f, 242.0f, -52.0f);
         var playerPosition = crossroads;
         var mapId = 1u;
@@ -354,13 +423,17 @@ public class TravelTaskTests
         task.Update();
         task.Update();
 
-        playerPosition = liveApproachPosition;
         mounted = false;
-        task.Update();
+        foreach (var approachPoint in approachRoute)
+        {
+            playerPosition = approachPoint.Position;
+            task.Update();
+        }
+
         task.Update();
 
-        Assert.Contains(diagnostics, message => message.Contains("complete index=1 reason=walk_arrived", StringComparison.Ordinal));
-        Assert.Contains(diagnostics, message => message.Contains("start index=2 type=Zeppelin", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("stage=orgrimmar.undercity_zeppelin.boarding_platform", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("type=Zeppelin", StringComparison.Ordinal));
         Assert.Same(task, taskStack.Peek());
     }
 
@@ -372,7 +445,7 @@ public class TravelTaskTests
 
         var crossroads = new Position(-437.0f, -2596.0f, 96.0f);
         var orgrimmarFlightMaster = new Position(1677.0f, -4315.0f, 62.0f);
-        var liveBoardingPosition = new Position(1320.142944f, -4653.158691f, 53.891945f);
+        var approachRoute = TransportData.ZeppelinUndercityOrgrimmar.Stops[0].ApproachRoute!;
         var undercityTarget = new Position(1584.0f, 242.0f, -52.0f);
         var playerPosition = crossroads;
         var mapId = 1u;
@@ -445,13 +518,17 @@ public class TravelTaskTests
         task.Update();
         task.Update();
 
-        playerPosition = liveBoardingPosition;
         mounted = false;
-        task.Update();
+        foreach (var approachPoint in approachRoute)
+        {
+            playerPosition = approachPoint.Position;
+            task.Update();
+        }
+
         task.Update();
 
-        Assert.Contains(diagnostics, message => message.Contains("complete index=1 reason=walk_arrived", StringComparison.Ordinal));
-        Assert.Contains(diagnostics, message => message.Contains("start index=2 type=Zeppelin", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("stage=orgrimmar.undercity_zeppelin.boarding_platform", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("type=Zeppelin", StringComparison.Ordinal));
         Assert.Same(task, taskStack.Peek());
     }
 

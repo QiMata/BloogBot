@@ -60,20 +60,9 @@ namespace BotRunner
 
                     // Keep GoTo pathfinding-driven so movement mirrors corpse-run behavior and avoids
                     // long stuck-forward loops when direct steering has no valid route.
-                    // Phase 2: pass physics wall contact hint so NavigationPath can suppress false stall
-                    // detection when the bot is genuinely blocked by geometry.
-                    bool hitWall = false;
-                    float wnx = 0f, wny = 0f, bf = 1f;
-                    if (_objectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
-                    {
-                        hitWall = wsOm.PhysicsHitWall;
-                        var wn = wsOm.PhysicsWallNormal2D;
-                        wnx = wn.X; wny = wn.Y;
-                        bf = wsOm.PhysicsBlockedFraction;
-                    }
                     try
                     {
-                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf, currentTransportGuid: _objectManager.Player.TransportGuid);
+                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, currentTransportGuid: _objectManager.Player.TransportGuid);
                         if (navPath.ShouldHoldPositionForTransport(_objectManager.Player.Position, waypoint))
                         {
                             _objectManager.StopAllMovement();

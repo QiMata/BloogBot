@@ -8,15 +8,16 @@
   },
   "routes": [
     {
-      "name": "ClimbOrgrimmarTowerToFrezza",
-      "description": "Phase 5.3.6 climb: OG flight master tower top to Frezza zeppelin master. The deck-lip step-up at corner [001]->[002] (1.75y vertical over 1.7y horizontal) is the open Phase 6 mesh-fidelity blocker.",
+      "name": "ClimbOrgrimmarTowerToBoardingPlatform",
+      "description": "Current long climb: OG flight master tower top to the zeppelin boarding/waiting platform beyond Frezza. Endpoint resolves to OrgrimmarUndercityZeppelinBoardingPlatform target poly 0x1000015201B41 (polyIdx=6977).",
       "map": 1,
       "start": [1677.0, -4315.0, 61.4],
-      "end":   [1331.11, -4649.45, 53.6269],
+      "end":   [1320.142944, -4653.158691, 53.891945],
       "tilesAffected": [[29, 40], [28, 40]],
-      "expectedCorners": "470-490",
-      "expectedStallCoord": [1338.1, -4646.0, 51.6],
-      "expectedStallReason": "deck-lip 1.75y step-up exceeds Tauren capsule runtime step-up tolerance"
+      "expectedCorners": "546 smooth corners in the 2026-06-04 D:/wwow-bot/test-data probe",
+      "expectedStallCoord": [1855.0, -4474.9, 48.1],
+      "expectedStallReason": "Known full-route blocked geometry before the zeppelin tower; endpoint still resolves to the boarding platform target poly.",
+      "expectedFailureSegment": "first true blocked geometry observed near idx=330: (1856.35,-4473.37,48.26) -> (1855.02,-4474.86,48.08)"
     },
     {
       "name": "FlightMasterDescentControl",

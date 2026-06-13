@@ -276,11 +276,13 @@ investigation on the current promoted tile, not as a coordinate or startup bug.
   `[TRAVEL_LEG] complete index=0 reason=walk_arrived` on the same
   Undercity-bound walk leg that previously stalled on the deck lip. This is
   the fastest live proof for the `40,29` lip/ramp lane.
-- `DeckLipClimbFromGruntToLiteralFrezza`: gated by
-  `WWOW_DECKLIP_DIRECT_FREZZA_TEST=1`. Uses the same Grunt-base staging, but
-  dispatches `TravelTo` directly to Frezza's literal map-1 spawn. This is the
-  cleanest live proof for "are we using the right coordinates?" on the current
-  promoted tile.
+- `DeckLipClimbFromGruntToZeppelinBoardingPlatform`: gated by
+  `WWOW_DECKLIP_DIRECT_BOARDING_TEST=1`. Uses the same Grunt-base staging, but
+  dispatches `TravelTo` directly to the zeppelin waiting platform beyond
+  Frezza. The target resolves to standable Detour poly `0x1000015201B41`
+  (`polyIdx=6977`) for `OrgrimmarUndercityZeppelinBoardingPlatform`, so future
+  boarding waits can sample distinct spots from that platform instead of
+  stacking every bot at one coordinate.
 
 ## Fast-Fail Blockers
 
